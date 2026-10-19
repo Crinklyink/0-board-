@@ -1,0 +1,43 @@
+# secrets and local state
+.env
+*.env.local
+server/data/
+# root only: a bare "data/" would also hide the Android source package app/oboard/data/
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# node
+node_modules/
+server/public/
+dist/
+
+# android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/libs/*.aar
+android/app/release-keystore.*
+*.jks
+*.keystore
+.idea/
+*.iml
+.kotlin/
+captures/
+
+# models / large downloads
+models/
+*.onnx
+*.tar.bz2
+
+# misc
+.DS_Store
+Thumbs.db
+*.log
+.devdata/
+
+# release signing (never commit)
+android/keystore.properties
+android/*.jks

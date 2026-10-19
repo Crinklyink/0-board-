@@ -1,0 +1,187 @@
+# Test report
+
+Version 0.1.0, 19 October 2026. A test is marked as passing only if it actually ran.
+
+**Test environment:**
+- Windows 11 PC: AMD, 16 logical cores, no NVIDIA GPU.
+- Android emulator: Android 17 / API 37, x86_64, 16 KB memory pages.
+  - Fold 7 layouts were checked at its real resolutions: 2184×1968 unfolded and 1080×2520 cover.
+- Debian 13 container with systemd, inside WSL, used for the Pi installer.
+
+**Not available:**
+- A Galaxy Z Fold 7.
+- A Raspberry Pi.
+- A TV.
+- A Gemini API key.
+
+Where Gemini was needed, a local stand-in (`tools/mock-gemini.mjs`) answered instead. It speaks the same REST
+(streaming, function calls) and Live WebSocket protocols. It proves that O Board's side of each conversation works;
+it does **not** prove that real Gemini makes good choices.
+
+## Summary
+
+| Test | Result |
+|---|---|
+| A. Input: speech becomes editable text | **Pass** on the emulator (synthesised speech through the real recogniser). Real microphone not tested |
+| B. Voice: spoken replies, interruption, repeats | **Pass** on the emulator. Not judged by ear on a phone speaker |
+| C. AI: instruction to Gemini, get a response | **Plumbing passes** against the stand-in. **Not run against real Gemini** (no key) |
+| D. Canvas actions: AI creates a real, saved note | **Pass** with the stand-in choosing the tool. Real Gemini's choices untested |
+| E. Synchronisation: phone edit reaches the TV | **Pass** (automated, plus emulator ↔ browser by hand) |
+| F. Persistence: survive a server restart | **Pass** (automated) |
+| G. Vision: the answer uses the photo's content | **Plumbing passes** (the photo reaches Gemini byte for byte). **Real answer not tested** (no key) |
+| H. Recovery: reconnect, interrupt, restart | **Pass** for each part tested (details below) |
+| I. APK: signed, installable, compatible | **Pass** for build, signature, alignment and the emulator. **Not installed on a physical Fold 7** |
+
+Automated suite: `cd server && npm test` runs **52 tests, 52 pass**. They cover the store, the server, the AI tools
+(against the stand-in), and layout and schema.
+
+## Details
+
+### A. Input
+
+The debug build's `dictate` command uses the same path as holding the mic with **Send when I let go** turned off:
+1. The phone speaks "Add a note about the gripper pads." with Kokoro.
+2. It feeds that audio, padded with silence, through Silero VAD and Qwen3-ASR.
+3. It puts the result in the text box.
+
+**Result:** the text box contained `Add a note about the gripper pads.`, word for word. Typing on the keyboard then
+changed it to `Add a note about the gripper pads in blue please.`, so the text is editable before sending.
+
+**Recognition accuracy (PC, same runtime):**
+- WER 0% on the five Kokoro-spoken test sentences.
+- Real recordings: noisy radio and fast rap were good; French, German and Spanish clips were good; a four-language
+  code-switching clip was weaker.
+- See [VOICE.md](VOICE.md).
+
+**Not tested:** a real microphone in a real room. The emulator has no microphone input in this setup.
+
+### B. Voice
+
+On the emulator (x86_64, using the PC's CPU), via **Settings → Voice → Run voice self-test** and the debug commands:
+
+| | Result |
+|---|---|
+| Kokoro | 4.31 s of speech made in 2.67 s (RTF 0.62) |
+| Supertonic | RTF 0.15, first audio after 811 ms |
+| Conversation (recognise → AI → speak): reply text to first sound | 648 ms debug build, 766 ms release |
+| Conversation: mic release to first sound | 3.98 s debug, 4.31 s release. Includes model warm-up, recognition and the stand-in reply on emulated hardware |
+| Interruption: from "stop" to silence | **3 ms** |
+
+After an interruption, the server cancelled the turn and no queued speech resumed. Repeated conversations worked
+(run several times, in both builds).
+
+**Not tested:** how the voices sound through a phone speaker, and real speed on the Fold 7's processor. The emulator
+runs on a desktop CPU.
+
+### C. AI (Gemini)
+
+**Automated** (`ai.test.js`, against the stand-in):
+- A spoken request becomes saved notes, and progress events stream to the TV.
+- Gemini 3 thought signatures are returned untouched.
+- Bad tool arguments come back to the model as a readable error.
+- Rate-limit and bad-key failures are reported plainly.
+- With no key set, messages still save and the user gets a clear message.
+
+**Not run:** any request to the real Gemini API. **To run it:** put your key in `/etc/oboard/oboard.env` on the Pi, or
+in `server/.env` on a PC without the `GEMINI_BASE_URL` line. Then ask something on the phone.
+
+### D. Canvas actions
+
+**Automated:**
+- The stand-in calls `add_notes`, and real objects appear in SQLite and on a connected TV client.
+- Every other tool is exercised against real state: diagram, connect, move, resize, group, organise, search, recall,
+  forget, focus TV, undo/redo, versions, delete with confirmation.
+
+**On the emulator:** "Put a note on the board about mounting a camera above the robot arm" was spoken, recognised
+and sent.
+- The Pi stored it as a voice message.
+- About 0.4 s later, the stand-in's `add_notes` call saved new notes, which appeared on the phone's board and the TV
+  view.
+- The stand-in always adds the same three notes, whatever the request. It does not understand language.
+
+**Live mode with the stand-in:** a tool call created the note "Live mode works end to end" through the Pi.
+
+**Not tested:** whether real Gemini picks sensible tools and layouts.
+
+### E. Synchronisation
+
+**Automated** (`Test E — sync`): an edit from the phone reaches the TV client, and the reverse.
+
+**By hand:** edits on the emulator canvas appeared in the browser TV view, and the reverse. Touch tests on the phone
+canvas (sent through Chrome DevTools to the WebView):
+- one-finger pan with inertia;
+- pinch zoom ×3;
+- tap to select;
+- drag to move a note, after which **Undo** put it back.
+
+### F. Persistence
+
+**Automated** (`Test F — persistence`): the server was restarted, and boards, objects, an uploaded image,
+conversation history and settings were all intact. Related tests passed for reopening the database file, graceful
+shutdown (WAL checkpointed, `quick_check ok`) and backup round-trips.
+
+**On the Pi installer test:** the server was killed with `kill -9`, and systemd restarted it within seconds
+(`/healthz` 200).
+
+### G. Vision
+
+**Automated** (`Test G (plumbing)`): a photo attached on the phone reaches Gemini byte for byte as inline image data.
+`view_images` lets the model ask to see an image already on the board. Uploaded photos get a searchable caption.
+
+**Not tested:** that real Gemini's answer describes the photo correctly. This needs a key.
+
+### H. Recovery
+
+| Part | Evidence |
+|---|---|
+| Client disconnects and reconnects | Automated: it receives only what it missed (delta), and no data is lost |
+| Phone changes network | Emulator, using a relay as the "home" address, which was then switched off. The phone moved to the Pi's other address about 5 s later without re-pairing; when "home" came back, it returned. The canvas reconnected both times |
+| Removed device | Automated: its open connection is cut at once, and its token stops working |
+| Interrupting a voice response | Emulator: silent within 3 ms; the server cancelled the turn; the next turn works (also automated) |
+| Server restart | Automated (F), plus the Pi `kill -9` test |
+| Offline capture | Captures are queued on the phone with idempotency keys. Automated: retried captures are not duplicated |
+
+### I. APK
+
+`dist/OBoard-0.1.0-arm64.apk`: 36.2 MB, SHA-256
+`7c02548c314fa0400b4012be7028495d8fc749f69bae4854ce4b62ad36dd7549`.
+
+| Check | Result |
+|---|---|
+| Package | `app.oboard` 0.1.0 (1), minSdk 29, targetSdk 36, compileSdk 37 |
+| Signature (`apksigner verify`) | Verifies; APK Signature Scheme v2; 1 signer `CN=O Board, O=Personal` |
+| 16 KB page support | `zipalign -c -P 16` OK, and every native library's LOAD segments are 16 KB aligned (needed on Android 15+ devices) |
+| Native code | `arm64-v8a` only (the Fold 7's ABI) |
+| Shrinking | R8 minify and resource shrinking on. The release build ran correctly on the emulator (cold start 1.09 s, warm 0.76 s) |
+| Permissions | Internet, network state, Wi-Fi state, multicast (Pi discovery), microphone, audio settings, vibrate |
+
+**Installed on a physical Galaxy Z Fold 7: no.**
+- The emulator runs x86_64, so emulator testing used the same code built with an extra x86_64 library set.
+- An arm64-only build on the x86 emulator runs through Android's arm translation layer, which crashed inside the
+  speech runtime. That is a limitation of the translation layer; real arm64 hardware runs the code natively.
+- This should be confirmed on the phone: install the APK, then run **Settings → Voice → Run voice self-test**.
+
+### Pi installer (extra)
+
+`pi/install.sh --no-kiosk` ran on Debian 13 (trixie) with systemd, in a disposable container.
+
+**What worked:**
+- It installed Node.js v24.21.0 after checking its SHA-256.
+- The `oboard` service ran with `User=oboard`, `ProtectSystem=strict`, `NoNewPrivileges` and `MemoryMax`.
+- `/etc/oboard/oboard.env` was `root:oboard 640` and unreadable by other users.
+- `/healthz` returned 200; `/api/boards` without a token returned 401.
+- The health check and `backup.sh` worked.
+- Re-running the installer kept settings and data, and `uninstall.sh` kept data.
+
+**Not tested:**
+- Raspberry Pi hardware or the arm64 Node download. Its checksum is pinned from the official `SHASUMS256.txt`.
+- The TV kiosk (cage + Chromium), which needs a display.
+- HDMI audio.
+
+## Still unverified, in priority order
+
+1. Real Gemini (C, G, and D's quality). It needs your API key.
+2. Installing and using the APK on the Fold 7, including on-device voice speed and quality, and the microphone.
+3. The Pi on real hardware: the TV kiosk, HDMI audio, and Avahi discovery from the phone.
+4. Gemini Live against Google's real endpoint, including ephemeral-token minting.
+5. Tailscale switching on a real phone network change.

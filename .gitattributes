@@ -1,0 +1,11 @@
+# Shell scripts and systemd units must keep Unix line endings to run on the Pi, even when cloned on Windows.
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+pi/** text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.woff2 binary
+*.ttf binary
+*.jar binary
+*.png binary

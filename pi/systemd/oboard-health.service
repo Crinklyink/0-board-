@@ -1,0 +1,6 @@
+[Unit]
+Description=O Board health check
+
+[Service]
+Type=oneshot
+ExecStart=/opt/oboard/pi/healthcheck.sh

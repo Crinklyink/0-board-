@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart the O Board TV browser (nightly memory hygiene)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl try-restart oboard-kiosk.service

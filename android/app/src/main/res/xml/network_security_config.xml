@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Raspberry Pi serves plain HTTP on the home network and over Tailscale (which is itself WireGuard-encrypted).
+  Android cannot express "private IP ranges only", so cleartext is permitted app-wide. Every API call still needs the
+  per-device bearer token from pairing, and the Gemini key never leaves the Pi. See docs/SECURITY.md.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
