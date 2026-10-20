@@ -97,6 +97,9 @@ fun BoardWebView(
     deviceName: String,
     controller: WebController,
     modifier: Modifier = Modifier,
+    // Side panes (Capture and Boards on the unfolded screen) show each board fitted to the pane, and leave the
+    // full-screen canvas's remembered position alone.
+    fitOnOpen: Boolean = false,
     onEvent: (WebEvent) -> Unit = {},
 ) {
     val event by rememberUpdatedState(onEvent)
@@ -181,7 +184,8 @@ fun BoardWebView(
                         return true
                     }
                 }
-                val q = "mode=$mode&host=${Uri.encode(serverUrl)}&name=${Uri.encode(deviceName)}" + (boardId?.let { "&board=${Uri.encode(it)}" } ?: "")
+                val q = "mode=$mode&host=${Uri.encode(serverUrl)}&name=${Uri.encode(deviceName)}" + (boardId?.let { "&board=${Uri.encode(it)}" } ?: "") +
+                    (if (fitOnOpen) "&fit=1" else "")
                 loadUrl("http://appassets.androidplatform.net/assets/web/index.html?$q#t=${Uri.encode(token)}")
                 controller.view = this
             }

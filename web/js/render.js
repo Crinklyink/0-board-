@@ -94,6 +94,7 @@ export class Renderer {
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
     this.cam.resize(w, h);
+    this.onResize?.();
     this.invalidate();
   }
 
@@ -523,7 +524,8 @@ export class Renderer {
       ctx.stroke();
       ctx.font = fontString(px * 0.78, 500);
       ctx.fillStyle = THEME.text3;
-      ctx.fillText('Live widget', ix + s * 1.6, iy + s * 0.78);
+      const room = b.x + b.w - (ix + s * 1.6) - px * 0.5; // the label never runs past the card's edge
+      if (ctx.measureText('Live widget').width <= room) ctx.fillText('Live widget', ix + s * 1.6, iy + s * 0.78);
     }
   }
 

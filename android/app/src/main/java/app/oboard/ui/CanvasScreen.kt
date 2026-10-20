@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -115,30 +118,37 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
             ) {
                 OIconButton(OIcons.Back, "Back", onClose, background = O.Bg2.copy(alpha = 0.92f))
                 Spacer(Modifier.width(8.dp))
-                Column(
-                    Modifier.weight(1f, fill = false).clip(RoundedCornerShape(12.dp)).background(O.Bg2.copy(alpha = 0.92f)).border(1.dp, O.Border, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Text(name, style = MaterialTheme.typography.titleSmall, color = O.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    ConnectionBadge(link, tvOnline, queued.size)
+                // The title takes the free space (so the buttons sit at the right edge) but is only as wide as its text.
+                Box(Modifier.weight(1f)) {
+                    Column(
+                        Modifier.clip(RoundedCornerShape(12.dp)).background(O.Bg2.copy(alpha = 0.92f)).border(1.dp, O.Border, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(name, style = MaterialTheme.typography.titleSmall, color = O.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        ConnectionBadge(link, tvOnline, queued.size)
+                    }
                 }
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                // Board-level actions only; adding things (tasks, files, widgets, memory) lives in the toolbar's More.
+                if (expanded && !panel) {
+                    OIconButton(OIcons.Chat, "Show conversation", { panel = true }, background = O.Bg2.copy(alpha = 0.92f))
+                    Spacer(Modifier.width(6.dp))
+                }
                 Box {
-                    OIconButton(OIcons.More, "More", { menu = true }, background = O.Bg2.copy(alpha = 0.92f))
+                    OIconButton(OIcons.More, "Board options", { menu = true }, background = O.Bg2.copy(alpha = 0.92f))
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = O.Bg2) {
-                        DropdownMenuItem(text = { Text("Show on TV", color = O.Text) }, onClick = { menu = false; vm.showOnTv(currentBoard) })
-                        DropdownMenuItem(text = { Text("Search", color = O.Text) }, onClick = { menu = false; controller.search() })
-                        DropdownMenuItem(text = { Text("Project memory", color = O.Text) }, onClick = { menu = false; controller.memory() })
-                        DropdownMenuItem(text = { Text("Add task", color = O.Text) }, onClick = { menu = false; controller.addTask() })
-                        DropdownMenuItem(text = { Text("Task list", color = O.Text) }, onClick = { menu = false; controller.tasks() })
-                        DropdownMenuItem(text = { Text("Fit everything", color = O.Text) }, onClick = { menu = false; controller.fit() })
-                        DropdownMenuItem(text = { Text("Add image or file", color = O.Text) }, onClick = { menu = false; controller.pickFile() })
-                        if (expanded) DropdownMenuItem(text = { Text(if (panel) "Hide conversation" else "Show conversation", color = O.Text) }, onClick = { menu = false; panel = !panel })
+                        DropdownMenuItem(text = { Text("Show on TV", color = O.Text) }, leadingIcon = { Icon(OIcons.Tv, null, tint = O.Text2) }, onClick = { menu = false; vm.showOnTv(currentBoard) })
+                        DropdownMenuItem(text = { Text("Search every board", color = O.Text) }, leadingIcon = { Icon(OIcons.Search, null, tint = O.Text2) }, onClick = { menu = false; controller.search() })
+                        DropdownMenuItem(text = { Text("Fit everything", color = O.Text) }, leadingIcon = { Icon(OIcons.Fit, null, tint = O.Text2) }, onClick = { menu = false; controller.fit() })
+                        if (expanded) DropdownMenuItem(
+                            text = { Text(if (panel) "Hide conversation" else "Show conversation", color = O.Text) },
+                            leadingIcon = { Icon(OIcons.Chat, null, tint = O.Text2) }, onClick = { menu = false; panel = !panel },
+                        )
                     }
                 }
             }
             // voice: listening/transcript overlay and the mic. Hidden while a dialog or menu of the page is open, so it
-            // never covers their buttons; it comes back as soon as they close.
-            if (!canvasOverlay && !canvasPopover) Column(
+            // never covers their buttons, and while the conversation panel is open, which has its own mic.
+            if (!canvasOverlay && !canvasPopover && !(expanded && panel)) Column(
                 Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 14.dp, bottom = 74.dp),
                 horizontalAlignment = Alignment.End,
             ) {
@@ -218,20 +228,23 @@ fun RemoteScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 overview = !overview; controller.setOverview(overview)
             }, background = if (overview) O.AccentSoft else O.Bg2, tint = if (overview) O.AccentHi else O.Text2)
         }
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            Box(
-                Modifier.weight(1f).fillMaxHeight().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, O.Border, RoundedCornerShape(16.dp)),
-            ) {
-                BoardWebView(mode = "remote", boardId = null, serverUrl = s.serverUrl, token = s.token, deviceName = "${s.deviceName} remote", controller = controller, modifier = Modifier.fillMaxSize())
+        // The mirror gets the full width; what the mic hears appears over its bottom edge only while it is listening.
+        Box(
+            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, O.Border, RoundedCornerShape(16.dp)),
+        ) {
+            BoardWebView(mode = "remote", boardId = null, serverUrl = s.serverUrl, token = s.token, deviceName = "${s.deviceName} remote", controller = controller, modifier = Modifier.fillMaxSize())
+            Column(Modifier.align(Alignment.BottomCenter).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.widthIn(max = 560.dp).clip(RoundedCornerShape(14.dp)).background(O.Bg2.copy(alpha = 0.94f))) { VoiceStrip(vm) }
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    if (overview) "Drag to move the TV's view · pinch to zoom it" else "Drag to pan the TV · pinch to zoom · tap to select · double-tap to edit",
-                    Modifier.align(Alignment.BottomCenter).padding(8.dp).clip(RoundedCornerShape(8.dp)).background(O.Bg.copy(alpha = 0.8f)).padding(horizontal = 10.dp, vertical = 5.dp),
-                    style = MaterialTheme.typography.bodySmall, color = O.Text3,
+                    if (overview) "Drag to move the TV's view · pinch to zoom it"
+                    else if (expanded) "Drag to pan the TV · pinch to zoom · tap to select · double-tap to edit"
+                    else "Drag to pan · pinch to zoom · double-tap to edit",
+                    Modifier.clip(RoundedCornerShape(8.dp)).background(O.Bg.copy(alpha = 0.8f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.bodySmall, color = O.Text3, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (expanded) Column(Modifier.width(300.dp).padding(12.dp)) { VoiceStrip(vm) }
         }
-        if (!expanded) VoiceStrip(vm)
         Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) { controls() }
     }
 }

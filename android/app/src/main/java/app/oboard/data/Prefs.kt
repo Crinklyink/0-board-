@@ -31,6 +31,7 @@ data class AppSettings(
     val captureBoard: String = "thoughts",
     val liveVoice: String = "Kore",
     val altUrls: List<String> = emptyList(), // every address the paired Pi answers on, preferred first (see Failover)
+    val dismissedKeys: Set<String> = emptySet(), // "NAME@requestedAt" of API key requests closed with "Not now"
 ) {
     val paired get() = serverUrl.isNotBlank() && token.isNotBlank()
 }
@@ -53,6 +54,7 @@ class Prefs(private val context: Context) {
         val CAPTURE = stringPreferencesKey("capture_board")
         val LIVEVOICE = stringPreferencesKey("live_voice")
         val ALTS = stringPreferencesKey("server_urls")
+        val DISMISSED_KEYS = stringPreferencesKey("dismissed_key_requests")
     }
 
     val settings: Flow<AppSettings> = context.store.data.map { p -> p.toSettings() }
@@ -76,6 +78,7 @@ class Prefs(private val context: Context) {
             captureBoard = this[K.CAPTURE] ?: d.captureBoard,
             liveVoice = this[K.LIVEVOICE] ?: d.liveVoice,
             altUrls = this[K.ALTS]?.split('\n')?.filter { it.isNotBlank() } ?: d.altUrls,
+            dismissedKeys = this[K.DISMISSED_KEYS]?.split('\n')?.filter { it.isNotBlank() }?.toSet() ?: d.dismissedKeys,
         )
     }
 
@@ -113,5 +116,10 @@ class Prefs(private val context: Context) {
         fun liveVoice(v: String) { p[K.LIVEVOICE] = v }
         fun serverUrl(v: String) { p[K.URL] = v }
         fun altUrls(v: List<String>) { p[K.ALTS] = v.joinToString("\n") }
+        /** Remembers a closed key request; the newest 50 are kept, and a new request for the same key shows again. */
+        fun dismissKey(entry: String) {
+            val old = p[K.DISMISSED_KEYS]?.split('\n')?.filter { it.isNotBlank() && it != entry } ?: emptyList()
+            p[K.DISMISSED_KEYS] = (old + entry).takeLast(50).joinToString("\n")
+        }
     }
 }

@@ -42,21 +42,28 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
+/** "1 item", "6 items". */
+fun itemCount(n: Int) = if (n == 1) "1 item" else "$n items"
+
+/**
+ * [onOpen] is a tap on a board in a list (on the unfolded screen it previews the board beside the list);
+ * [onOpenFull] is an explicit "Open" button, which always opens the board full screen.
+ */
 @Composable
-fun BoardsScreen(vm: AppViewModel, onOpen: (String) -> Unit, modifier: Modifier = Modifier, selected: String? = null) {
+fun BoardsScreen(vm: AppViewModel, onOpen: (String) -> Unit, modifier: Modifier = Modifier, selected: String? = null, onOpenFull: (String) -> Unit = onOpen) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     Column(modifier.fillMaxSize()) {
         Segmented(listOf("Home", "Thoughts", "Spaces"), section, { section = it }, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth())
         when (section) {
-            0 -> HomeSection(vm, onOpen, selected)
-            1 -> ThoughtsSection(vm, onOpen)
+            0 -> HomeSection(vm, onOpen, onOpenFull, selected)
+            1 -> ThoughtsSection(vm, onOpenFull)
             else -> SpacesSection(vm, onOpen, selected)
         }
     }
 }
 
 @Composable
-private fun HomeSection(vm: AppViewModel, onOpen: (String) -> Unit, selected: String?) {
+private fun HomeSection(vm: AppViewModel, onOpen: (String) -> Unit, onOpenFull: (String) -> Unit, selected: String?) {
     val boards by vm.boards.collectAsState()
     val display by vm.display.collectAsState()
     val tvOnline by vm.tvOnline.collectAsState()
@@ -75,14 +82,14 @@ private fun HomeSection(vm: AppViewModel, onOpen: (String) -> Unit, selected: St
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(onTv?.name ?: "—", style = MaterialTheme.typography.titleLarge, color = O.Text)
-                    if (onTv != null) Text("${onTv.count} items", style = MaterialTheme.typography.bodySmall, color = O.Text3)
+                    if (onTv != null) Text(itemCount(onTv.count), style = MaterialTheme.typography.bodySmall, color = O.Text3)
                     if (onTv != null) {
                         Spacer(Modifier.height(12.dp))
                         BoardThumb(onTv.preview, Modifier.fillMaxWidth().height(132.dp))
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OButton("Open", { onTv?.let { onOpen(it.id) } }, enabled = onTv != null, icon = OIcons.Canvas)
+                        OButton("Open", { onTv?.let { onOpenFull(it.id) } }, enabled = onTv != null, icon = OIcons.Canvas)
                         OButton("Remote", { vm.tab.value = Tab.Remote }, kind = BtnKind.Ghost, icon = OIcons.Tv)
                     }
                 }
@@ -155,7 +162,7 @@ private fun BoardRow(vm: AppViewModel, b: BoardInfo, onOpen: (String) -> Unit, s
     Box {
         RowItem(
             b.name,
-            subtitle = "${b.count} items · $updated",
+            subtitle = "${itemCount(b.count)} · $updated",
             icon = if (b.isThoughts) OIcons.Bulb else OIcons.Layers,
             onClick = { onOpen(b.id) },
             leading = { BoardThumb(b.preview, Modifier.size(width = 68.dp, height = 46.dp)) },

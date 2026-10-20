@@ -164,22 +164,24 @@ export class Session extends Emitter {
   }
 
   #saveCam() {
-    if (this.cfg.mode !== 'edit' || !this.boardId) return;
+    if (this.cfg.mode !== 'edit' || this.cfg.fit || !this.boardId) return;
     lstore.set(`oboard.cam.${this.boardId}`, JSON.stringify({ x: this.camera.x, y: this.camera.y, z: this.camera.z }));
   }
 
   queueCamSave() {
+    this.userMovedCam = true; // only called for the user's own pans and zooms
     clearTimeout(this.camTimer);
     this.camTimer = setTimeout(() => this.#saveCam(), 500);
   }
 
   #restoreCamera(id, hasContent) {
+    this.userMovedCam = false;
     if (this.cfg.mode === 'tv' || this.cfg.mode === 'remote') {
       if (this.display?.cam && this.display.boardId === id) this.#applyRemoteCam(this.camMap.fromDisplay(this.display.cam), false);
       else this.fitContent(false);
       return;
     }
-    const saved = lstore.get(`oboard.cam.${id}`);
+    const saved = this.cfg.fit ? null : lstore.get(`oboard.cam.${id}`);
     if (saved) {
       try { const c = JSON.parse(saved); this.camera.set(c.x, c.y, c.z); return; } catch { /* fall through */ }
     }

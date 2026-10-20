@@ -40,6 +40,8 @@ function start() {
   const editor = new Editor({ host: document.getElementById('stage'), session });
   const widgets = new WidgetLayer({ host: document.getElementById('stage'), before: root, session, api, cfg });
   renderer.widgetLive = (id) => widgets.isLive(id);
+  // A fitted side pane stays fitted while it settles or the phone unfolds, until the user moves the view themselves.
+  if (cfg.fit) renderer.onResize = () => { if (model.loaded && !session?.userMovedCam) session.fitContent(false); };
   renderer.onFrame = () => widgets.sync();
   const ui = new UI({ root, session, editor, cfg, api, widgets });
   // Native controls sit above the WebView; keep them clear of HTML dialogs and their save buttons.

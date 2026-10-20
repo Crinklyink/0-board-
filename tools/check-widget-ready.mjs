@@ -131,6 +131,44 @@ try {
   assert(!reports('w_broken').some((e) => e.level === 'ready'), 'A widget whose follow-up request failed must never be reported running');
   assert.match(first('w_broken').message, /HTTP 500/);
   console.log('PASSED: a failing follow-up request is reported as an error, never as running');
+
+  // Small widgets run live on dense phone screens (~200 physical px wide), but stay cards on a 1x screen like the TV.
+  const liveAtWidth = async (dpr, cssWidth) => {
+    await call('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: dpr, mobile: false });
+    const o = await evaluate(`oboard.model.get('w_static')`);
+    await evaluate(`oboard.camera.set(${o.x + o.w / 2}, ${o.y + o.h / 2}, ${cssWidth / o.w})`);
+    await sleep(600);
+    return evaluate(`oboard.widgets.isLive('w_static')`);
+  };
+  assert.equal(await liveAtWidth(1, 90), false, 'At 1x a 90 px wide widget shows its card');
+  assert.equal(await liveAtWidth(2.625, 90), true, 'On a 2.625x phone screen a 90 px wide widget (236 physical px) runs live');
+  assert.equal(await liveAtWidth(2.625, 60), false, 'Below ~200 physical px it shows its card');
+  await call('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+  console.log('PASSED: small widgets run live on dense phone screens, and stay cards at 1x');
+
+  // Side panes (?fit=1) open every board fitted, ignore the full canvas's saved position and never overwrite it.
+  const savedCam = JSON.stringify({ x: 99999, y: 99999, z: 3 });
+  await evaluate(`localStorage.setItem('oboard.cam.${board.id}', ${JSON.stringify(savedCam)})`);
+  await call('Page.navigate', { url: `${server.base}/?board=${board.id}&fit=1#t=${token}` });
+  const fitDeadline = Date.now() + 15000;
+  while (Date.now() < fitDeadline && !(await evaluate('!!window.oboard?.model.loaded').catch(() => false))) await sleep(100);
+  await sleep(300);
+  const fitted = await evaluate(`{ const b = oboard.model.contentBounds(); const c = oboard.camera; ({ dx: Math.abs(c.x - (b.x + b.w / 2)), dy: Math.abs(c.y - (b.y + b.h / 2)), seen: b.w * c.z <= c.w && b.h * c.z <= c.h }); }`);
+  assert(fitted.dx < 1 && fitted.dy < 1 && fitted.seen, `A fitted pane opens on the whole board (${JSON.stringify(fitted)})`);
+  await evaluate('oboard.session.queueCamSave()');
+  await sleep(800);
+  assert.equal(await evaluate(`localStorage.getItem('oboard.cam.${board.id}')`), savedCam, 'A fitted pane leaves the saved position alone');
+  console.log('PASSED: side panes open boards fitted and leave the full canvas\'s saved position alone');
+
+  // The phone's TV remote mirror runs widgets too, so it shows what the TV shows.
+  await server.call('POST', '/api/display', { boardId: board.id, fit: true }, { tok: token });
+  await call('Page.navigate', { url: `${server.base}/?mode=remote#t=${token}` });
+  const remoteDeadline = Date.now() + 15000;
+  while (Date.now() < remoteDeadline && !(await evaluate(`document.querySelectorAll('.wg:not([hidden]) iframe').length >= 3`).catch(() => false))) await sleep(200);
+  assert(await evaluate(`document.querySelectorAll('.wg:not([hidden]) iframe').length >= 3`), 'The remote mirror runs the board\'s widgets');
+  const { data: remoteShot } = await call('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(path.join(out, 'remote-widgets.png'), Buffer.from(remoteShot, 'base64'));
+  console.log('PASSED: the TV remote mirror runs the board\'s widgets');
   assert.deepEqual(errors, [], 'Unexpected JavaScript errors on the board page');
   console.log(`PASSED: no uncaught JavaScript errors; screenshot: ${path.join(out, 'widget-ready.png')}`);
 } finally {

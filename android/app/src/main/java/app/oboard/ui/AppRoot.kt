@@ -103,17 +103,18 @@ private fun MainScaffold(vm: AppViewModel) {
                     CaptureScreen(vm, Modifier.width(380.dp).fillMaxHeight().imePadding())
                     Box(Modifier.weight(1f).fillMaxHeight().padding(8.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, O.Border, RoundedCornerShape(16.dp))) {
                         val board = aiBoard
-                        if (board != null) BoardWebView("edit", board, s.serverUrl, s.token, s.deviceName, remember { WebController() }, Modifier.fillMaxSize())
+                        if (board != null) BoardWebView("edit", board, s.serverUrl, s.token, s.deviceName, remember { WebController() }, Modifier.fillMaxSize(), fitOnOpen = true)
                     }
                 }
             } else CaptureScreen(vm, mod.imePadding())
             Tab.Boards -> if (expanded) {
                 Row(mod) {
-                    BoardsScreen(vm, onOpen = { selectedBoard = it }, Modifier.width(340.dp).fillMaxHeight(), selected = selectedBoard)
+                    // A tap on a list row previews the board on the right; "Open" buttons open it full screen.
+                    BoardsScreen(vm, onOpen = { selectedBoard = it }, Modifier.width(340.dp).fillMaxHeight(), selected = selectedBoard, onOpenFull = { vm.openCanvas(it) })
                     val sel = selectedBoard ?: aiBoard
                     Box(Modifier.weight(1f).fillMaxHeight().padding(8.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, O.Border, RoundedCornerShape(16.dp))) {
                         if (sel != null) {
-                            BoardWebView("edit", sel, s.serverUrl, s.token, s.deviceName, remember { WebController() }, Modifier.fillMaxSize())
+                            BoardWebView("edit", sel, s.serverUrl, s.token, s.deviceName, remember { WebController() }, Modifier.fillMaxSize(), fitOnOpen = true)
                             Row(Modifier.align(Alignment.TopEnd).padding(10.dp)) {
                                 OIconButton(OIcons.Tv, "Show on TV", { vm.showOnTv(sel) }, background = O.Bg2)
                                 Spacer(Modifier.width(6.dp))
@@ -138,12 +139,10 @@ private fun MainScaffold(vm: AppViewModel) {
             }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 Header(DESTS.first { it.tab == tab }.label, link, tvOnline, queued.size, showSettings = false) { vm.overlay.value = Overlay.Settings() }
+                if (tab != Tab.Capture) KeyRequestBar(vm, Modifier.padding(horizontal = 4.dp)) // Capture shows it right above its message box
                 Box(Modifier.weight(1f)) {
                     content(Modifier.fillMaxSize())
-                    Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (tab != Tab.Capture) KeyRequestBar(vm) // Capture shows it right above its message box
-                        ConfirmBar(vm, Modifier)
-                    }
+                    ConfirmBar(vm, Modifier.align(Alignment.BottomCenter))
                 }
             }
         }
@@ -152,12 +151,10 @@ private fun MainScaffold(vm: AppViewModel) {
         val typing = WindowInsets.isImeVisible
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
             Header(DESTS.first { it.tab == tab }.label, link, tvOnline, queued.size, showSettings = true) { vm.overlay.value = Overlay.Settings() }
+            if (tab != Tab.Capture) KeyRequestBar(vm, Modifier.padding(horizontal = 4.dp)) // Capture shows it right above its message box
             Box(Modifier.weight(1f)) {
                 content(Modifier.fillMaxSize())
-                Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (tab != Tab.Capture) KeyRequestBar(vm) // Capture shows it right above its message box
-                    ConfirmBar(vm, Modifier)
-                }
+                ConfirmBar(vm, Modifier.align(Alignment.BottomCenter))
             }
             if (!typing) {
                 Row(

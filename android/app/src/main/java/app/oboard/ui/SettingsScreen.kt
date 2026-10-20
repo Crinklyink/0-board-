@@ -384,7 +384,7 @@ private fun BackupPage(vm: AppViewModel) {
     status?.let { Text(it, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = O.Text2) }
     SectionLabel("Export one board")
     boards.forEach { b ->
-        RowItem(b.name, subtitle = "${b.count} items", icon = OIcons.Layers, onClick = { exportId = b.id; saveExport.launch("${b.name}.oboard.json") })
+        RowItem(b.name, subtitle = itemCount(b.count), icon = OIcons.Layers, onClick = { exportId = b.id; saveExport.launch("${b.name}.oboard.json") })
     }
 }
 

@@ -549,7 +549,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** API keys for widgets (names and websites only). Missing ones the assistant asked for show as a card. */
     val apiKeys = MutableStateFlow<List<ApiKeyInfo>>(emptyList())
-    val dismissedKeyRequests = MutableStateFlow<Set<String>>(emptySet())
+
+    /** "Not now" on a key request: it stays closed across restarts until the assistant asks for that key again. */
+    fun dismissKeyRequest(k: ApiKeyInfo) = updatePrefs { it.dismissKey(keyRequestId(k)) }
 
     fun loadApiKeys() = viewModelScope.launch { runCatching { c.api.apiKeys() }.onSuccess { apiKeys.value = it } }
 

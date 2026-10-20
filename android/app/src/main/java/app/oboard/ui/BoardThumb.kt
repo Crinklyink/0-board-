@@ -12,6 +12,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import app.oboard.data.BoardPreview
@@ -57,6 +60,18 @@ fun BoardThumb(preview: BoardPreview?, modifier: Modifier = Modifier) {
                     "widget" -> {
                         drawRoundRect(Color(0xFF0B1626), tl, sz, r)
                         drawRoundRect(O.Accent.copy(alpha = 0.8f), tl, sz, r, style = Stroke(1.dp.toPx()))
+                        // A small chart line, so a board of widgets reads as live data rather than empty boxes.
+                        if (sz.width > 14.dp.toPx() && sz.height > 9.dp.toPx()) {
+                            val x0 = tl.x + sz.width * 0.2f
+                            val dx = sz.width * 0.6f
+                            val line = Path().apply {
+                                moveTo(x0, tl.y + sz.height * 0.68f)
+                                lineTo(x0 + dx * 0.35f, tl.y + sz.height * 0.45f)
+                                lineTo(x0 + dx * 0.6f, tl.y + sz.height * 0.57f)
+                                lineTo(x0 + dx, tl.y + sz.height * 0.3f)
+                            }
+                            drawPath(line, O.AccentHi.copy(alpha = 0.85f), style = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                        }
                     }
                     "image" -> drawRoundRect(Color(0xFF2A3A50), tl, sz, r)
                     "text" -> drawRoundRect(Color(STROKE[c]).copy(alpha = 0.45f), Offset(tl.x, tl.y + sz.height * 0.3f), Size(sz.width, sz.height * 0.4f), r)

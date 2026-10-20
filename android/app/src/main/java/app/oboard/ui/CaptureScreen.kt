@@ -54,7 +54,11 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import app.oboard.data.Link
@@ -106,11 +110,7 @@ fun CaptureScreen(vm: AppViewModel, modifier: Modifier = Modifier, showHeader: B
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (thread.isEmpty()) {
-                EmptyState(
-                    "Say or type anything",
-                    "Hold the mic to talk. Save keeps a thought in Thoughts right away, even offline. Ask sends it to the assistant, who can work on the board.",
-                    Modifier.align(Alignment.Center),
-                )
+                CaptureIntro(Modifier.align(Alignment.Center))
             } else {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 8.dp)) {
                     items(thread, key = { it.id }) { item -> ThreadRow(item, onDiscard = { vm.deleteQueued(item.id) }) }
@@ -128,6 +128,34 @@ fun CaptureScreen(vm: AppViewModel, modifier: Modifier = Modifier, showHeader: B
         KeyRequestBar(vm, Modifier.fillMaxWidth().wrapContentWidth())
         VoiceStrip(vm)
         Composer(vm)
+    }
+}
+
+/** First-run guide: the three ways in, one line each, matching the buttons below. */
+@Composable
+private fun CaptureIntro(modifier: Modifier = Modifier) {
+    Column(modifier.widthIn(max = 360.dp).padding(horizontal = 24.dp)) {
+        Text("Say or type anything", style = MaterialTheme.typography.titleMedium, color = O.Text)
+        Spacer(Modifier.height(14.dp))
+        listOf(
+            Triple(OIcons.Mic, "Hold the mic", "to talk; let go to finish"),
+            Triple(OIcons.Inbox, "Save", "keeps it in Thoughts, even offline"),
+            Triple(OIcons.Send, "Ask", "sends it to the assistant, who can work on the board"),
+        ).forEach { (icon, verb, rest) ->
+            Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
+                Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(O.Surface), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, Modifier.size(16.dp), tint = O.AccentHi)
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = O.Text, fontWeight = FontWeight.W600)) { append(verb) }
+                        append(" $rest")
+                    },
+                    Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium, color = O.Text2,
+                )
+            }
+        }
     }
 }
 

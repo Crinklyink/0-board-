@@ -1,7 +1,11 @@
 import { THEME } from './theme.js';
 import { codeHash } from '../shared/schema.js';
 
-const MIN_LIVE_PX = 110;       // narrower than this on screen: show the canvas card instead of the live frame
+// Narrower than this on screen: show the canvas card instead of the live frame. Dense phone screens still show a
+// small widget's numbers sharply, so there the limit is ~200 physical pixels (about 76 CSS px instead of 110).
+const MIN_LIVE_PX = 110;
+const MIN_LIVE_DEVICE_PX = 200;
+const minLivePx = () => Math.min(MIN_LIVE_PX, MIN_LIVE_DEVICE_PX / (window.devicePixelRatio || 1));
 const MARGIN_PX = 240;         // start frames a little before they scroll into view
 const MAX_LIVE = 12;           // frames are real pages: cap how many run at once
 const UNLOAD_AFTER_MS = 60_000; // off screen this long: stop it
@@ -29,7 +33,8 @@ export class WidgetLayer {
     host.insertBefore(this.el, before);
     this.frames = new Map();
     this.interactive = null;
-    this.enabled = cfg.mode !== 'remote';
+    // The phone's TV remote runs them too, so its mirror shows what the TV shows (it never saves widget state).
+    this.enabled = true;
     window.addEventListener('message', (e) => this.#onMessage(e));
     session.net.on('secrets', (m) => this.#onSecrets(m));
     session.on('board', (b) => { if (b.id !== this.boardId) { this.clear(); this.boardId = b.id; } });
@@ -59,6 +64,7 @@ export class WidgetLayer {
     const widgets = model.list().filter((o) => o.type === 'widget');
     const seen = new Set();
     let live = [...this.frames.values()].filter((f) => f.alive).length;
+    const minPx = minLivePx();
     let order = 0;
     for (const o of widgets) {
       seen.add(o.id);
@@ -66,7 +72,7 @@ export class WidgetLayer {
       const sw = o.w * z;
       const sh = o.h * z;
       const onScreen = p.x < cam.w + MARGIN_PX && p.y < cam.h + MARGIN_PX && p.x + sw > -MARGIN_PX && p.y + sh > -MARGIN_PX;
-      const bigEnough = sw >= MIN_LIVE_PX;
+      const bigEnough = sw >= minPx;
       let f = this.frames.get(o.id);
       if (!f && onScreen && bigEnough && live < MAX_LIVE) { f = this.#create(o); live++; }
       if (!f) continue;

@@ -3,10 +3,10 @@ package app.oboard.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -40,38 +40,46 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.oboard.data.ApiKeyInfo
 import kotlinx.coroutines.launch
 
+/** Identifies one request, so closing it does not hide a later request for the same key. */
+fun keyRequestId(k: ApiKeyInfo) = "${k.name}@${k.requestedAt ?: 0}"
+
 /**
- * The assistant asked for an API key a widget needs. The key is typed here, goes straight to the Pi, and is never part
- * of the conversation (so Gemini never sees it).
+ * The assistant asked for an API key a widget needs. A slim banner that sits in the page flow (it never covers
+ * anything); the key box opens only when asked for. The key goes straight to the Pi and is never part of the
+ * conversation (so Gemini never sees it). "Not now" is remembered; Settings → API keys still lists the request.
  */
 @Composable
 fun KeyRequestBar(vm: AppViewModel, modifier: Modifier = Modifier) {
     val keys by vm.apiKeys.collectAsState()
-    val dismissed by vm.dismissedKeyRequests.collectAsState()
-    val req = keys.filter { !it.set && it.requestedAt != null && it.name !in dismissed }.maxByOrNull { it.requestedAt ?: 0 }
-    AnimatedVisibility(req != null, modifier, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+    val s by vm.settings.collectAsState()
+    val req = keys.filter { !it.set && it.requestedAt != null && keyRequestId(it) !in s.dismissedKeys }.maxByOrNull { it.requestedAt ?: 0 }
+    var open by remember(req?.name) { mutableStateOf(false) }
+    AnimatedVisibility(req != null, modifier, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         if (req != null) {
             Column(
-                Modifier.padding(12.dp).widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(O.Bg2)
-                    .border(1.dp, O.BorderHi, RoundedCornerShape(16.dp)).padding(14.dp),
+                Modifier.padding(horizontal = 12.dp, vertical = 6.dp).widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(O.Bg2).border(1.dp, O.BorderHi, RoundedCornerShape(14.dp)).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(O.AccentSoft), contentAlignment = Alignment.Center) {
-                        Icon(OIcons.Key, null, Modifier.size(18.dp), tint = O.AccentHi)
+                    Box(Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)).background(O.AccentSoft), contentAlignment = Alignment.Center) {
+                        Icon(OIcons.Key, null, Modifier.size(16.dp), tint = O.AccentHi)
                     }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("A widget needs your ${req.label} key", style = MaterialTheme.typography.titleSmall, color = O.Text)
-                        if (req.why.isNotBlank()) Text(req.why, style = MaterialTheme.typography.bodySmall, color = O.Text2)
+                        Text("${req.label} key needed", style = MaterialTheme.typography.titleSmall, color = O.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(req.why.ifBlank { "For a widget on your board" }, style = MaterialTheme.typography.bodySmall, color = O.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    OIconButton(OIcons.Close, "Not now", { vm.dismissedKeyRequests.value = dismissed + req.name }, size = 36.dp)
+                    if (!open) { Spacer(Modifier.width(8.dp)); OButton("Add key", { open = true }, kind = BtnKind.Secondary) }
+                    OIconButton(OIcons.Close, "Not now", { vm.dismissKeyRequest(req) }, size = 40.dp)
                 }
-                Spacer(Modifier.height(10.dp))
-                KeyEntry(vm, req, onSaved = {})
+                AnimatedVisibility(open) {
+                    Column(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 4.dp)) { KeyEntry(vm, req, onSaved = { open = false }) }
+                }
             }
         }
     }

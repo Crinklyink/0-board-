@@ -39,6 +39,7 @@ export function loadConfig() {
     board: q.get('board') || hash.get('board') || '',
     chrome: q.get('chrome') || (mode === 'tv' ? 'none' : embedded ? 'min' : 'full'),
     dpr: Number(q.get('dpr')) || 0,
+    fit: q.get('fit') === '1', // always open boards fitted to the view, and do not remember this view's position
     embedded,
     name: q.get('name') || (mode === 'tv' ? 'TV display' : embedded ? 'Phone canvas' : 'Web'),
   };

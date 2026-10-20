@@ -67,4 +67,5 @@ object OIcons {
     val Sparse = icon("dot", circle(12f, 12f, 1.5f))
     val Key = icon("key", circle(8f, 15.5f, 3.5f), "M10.6 13L19 4.5M15.5 8l2.5 2.5M13.3 10.2l2 2")
     val Widget = icon("widget", rrect(3.5f, 4.5f, 17f, 15f, 2.5f), "M7 15.5l3-3.5 2.5 2 4.5-5.5")
+    val Chat = icon("chat", "M5.5 4.5h13A2 2 0 0120.5 6.5v8.5a2 2 0 01-2 2H11l-4.5 3.5v-3.5h-1a2 2 0 01-2-2V6.5a2 2 0 012-2z", "M8 9.5h8M8 12.5h5")
 }
