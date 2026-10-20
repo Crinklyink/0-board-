@@ -59,6 +59,96 @@
   };
   window.ob = ob;
 
+  // ------------------------------------------------------------------ kit: small helpers that make widgets look right
+
+  const minus = '−';
+  ob.kit = {
+    fmt: {
+      /** $1,234.56 (small prices keep more digits, e.g. $0.004213). */
+      money(n, currency = 'USD') {
+        const v = Number(n);
+        const digits = Math.abs(v) >= 1 ? 2 : Math.abs(v) >= 0.01 ? 4 : 6;
+        try { return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v); } catch { return `${v.toFixed(digits)} ${currency}`; }
+      },
+      num: (n, dp = 2) => Number(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }),
+      /** +1.23 / −0.45 with a real minus sign. */
+      signed: (n, dp = 2) => `${n >= 0 ? '+' : minus}${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+      pct: (n, dp = 2) => `${n >= 0 ? '+' : minus}${Math.abs(n).toFixed(dp)}%`,
+      compact: (n) => Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(n),
+      time: (d, opts = {}) => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...opts }),
+      date: (d, opts = {}) => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', ...opts }),
+      ago(d) {
+        const s = Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 1000));
+        return s < 45 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
+      },
+    },
+    /** Set an element's text (and optionally its class) by selector. */
+    set(sel, text, cls) {
+      const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+      if (!el) return;
+      el.textContent = text;
+      if (cls !== undefined) el.className = cls;
+    },
+    /**
+     * A calm line chart in the board's style: thin line, soft fill, few ticks, no legend, prices on the right.
+     * Returns { chart, update(labels, values, color) }.
+     */
+    lineChart(canvas, { labels = [], values = [], color, fill = true, yRight = true, ticks = 4, tooltips = true } = {}) {
+      const t = ob.theme;
+      const c0 = color || t.accent;
+      const chart = new window.Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: values, borderColor: c0, borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.25, fill,
+            backgroundColor: (ctx) => {
+              const col = ctx.chart.data.datasets[0].borderColor;
+              const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height || 200);
+              g.addColorStop(0, /^#[0-9a-f]{6}$/i.test(col) ? `${col}55` : 'rgba(86,137,186,0.3)');
+              g.addColorStop(1, /^#[0-9a-f]{6}$/i.test(col) ? `${col}00` : 'rgba(86,137,186,0)');
+              return g;
+            },
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { intersect: false, mode: 'index' },
+          plugins: { legend: { display: false }, tooltip: { enabled: tooltips && ob.mode !== 'tv', displayColors: false } },
+          scales: {
+            x: { ticks: { color: t.muted, maxTicksLimit: ticks, maxRotation: 0, autoSkipPadding: 12 }, grid: { display: false }, border: { display: false } },
+            y: { position: yRight ? 'right' : 'left', ticks: { color: t.muted, maxTicksLimit: ticks }, grid: { color: t.grid }, border: { display: false } },
+          },
+        },
+      });
+      return {
+        chart,
+        update(nextLabels, nextValues, nextColor) {
+          chart.data.labels = nextLabels;
+          chart.data.datasets[0].data = nextValues;
+          if (nextColor) chart.data.datasets[0].borderColor = nextColor;
+          chart.update('none');
+        },
+      };
+    },
+    /** Plain-words description of a WMO weather code (used by Open-Meteo). */
+    weather(code) {
+      const c = Number(code);
+      if (c === 0) return 'Clear';
+      if (c === 1) return 'Mostly clear';
+      if (c === 2) return 'Partly cloudy';
+      if (c === 3) return 'Overcast';
+      if (c === 45 || c === 48) return 'Fog';
+      if (c >= 51 && c <= 57) return 'Drizzle';
+      if (c >= 61 && c <= 67) return c >= 66 ? 'Freezing rain' : c >= 65 ? 'Heavy rain' : 'Rain';
+      if (c >= 71 && c <= 77) return 'Snow';
+      if (c >= 80 && c <= 82) return 'Showers';
+      if (c === 85 || c === 86) return 'Snow showers';
+      if (c >= 95) return 'Thunderstorm';
+      return 'Mixed';
+    },
+  };
+
   function safeJson(v) { try { return JSON.stringify(v); } catch { return String(v); } }
 
   // ------------------------------------------------------------------ status messages

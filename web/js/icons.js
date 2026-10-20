@@ -33,6 +33,7 @@ export const ICON = {
   ask: svg('<path d="M4.5 5.5h15v10h-9l-4.5 4v-4h-1.5z"/>'),
   tv: svg('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M9 20h6M12 17v3"/>'),
   widget: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M7 15.5l3-3.5 2.5 2 4.5-5.5"/>'),
+  sliders: svg('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
   refresh: svg('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>'),
   tap: svg('<path d="M9.5 11V5.8a1.8 1.8 0 0 1 3.6 0V11l3.6.7a2 2 0 0 1 1.6 2.3l-.8 4.4a2.5 2.5 0 0 1-2.5 2.1h-3.4a2.5 2.5 0 0 1-2-1l-3-4a1.6 1.6 0 0 1 2.4-2.1l.5.6"/>'),
   boards: svg('<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>'),

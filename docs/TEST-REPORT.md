@@ -1,6 +1,6 @@
 # Test report
 
-Version 0.2.0, 19 October 2026. A test is marked as passing only if it actually ran.
+Version 0.3.0, 19 October 2026. A test is marked as passing only if it actually ran.
 
 **Test environment:**
 - Windows 11 PC: AMD, 16 logical cores, no NVIDIA GPU.
@@ -32,7 +32,7 @@ it does **not** prove that real Gemini makes good choices.
 | H. Recovery: reconnect, interrupt, restart | **Pass** for each part tested (details below) |
 | I. APK: signed, installable, compatible | **Pass** for build, signature, alignment and the emulator. **Not installed on a physical Fold 7** |
 
-Automated suite: `cd server && npm test` runs **56 tests, 56 pass**. They cover the store, the server, widgets and API keys, the AI tools
+Automated suite: `cd server && npm test` runs **58 tests, 58 pass**. They cover the store, the server, widgets and API keys, the AI tools
 (against the stand-in), and layout and schema.
 
 ## Details
@@ -143,12 +143,12 @@ shutdown (WAL checkpointed, `quick_check ok`) and backup round-trips.
 
 ### I. APK
 
-`dist/OBoard-0.2.0-arm64.apk`: 36.3 MB, SHA-256
-`e37e5329247e22af079d81ccaabc10d0e0c61c00aba90de9d944e2802e647605`.
+`dist/OBoard-0.3.0-arm64.apk`: 36.3 MB, SHA-256
+`803d3c8d4249a8a3856a748ceed2afd5ee1c776ffe5032f9c84b91e734c6d301`.
 
 | Check | Result |
 |---|---|
-| Package | `app.oboard` 0.2.0 (2), minSdk 29, targetSdk 36, compileSdk 37 |
+| Package | `app.oboard` 0.3.0 (3), minSdk 29, targetSdk 36, compileSdk 37 |
 | Signature (`apksigner verify`) | Verifies; APK Signature Scheme v2; 1 signer `CN=O Board, O=Personal` |
 | 16 KB page support | `zipalign -c -P 16` OK, and every native library's LOAD segments are 16 KB aligned (needed on Android 15+ devices) |
 | Native code | `arm64-v8a` only (the Fold 7's ABI) |
@@ -219,6 +219,36 @@ background thread.
 - Real Gemini writing widget code. The stand-in always returns the same pre-made NVDA widget, so the quality of the
   widgets Gemini writes is unverified.
 - Widgets on the Pi's kiosk hardware.
+
+### Ready-made widgets (0.3.0)
+
+`node tools/check-widgets.mjs` puts every template on a board and runs them in headless Chrome with live data. All
+six ran:
+
+| Template | It showed |
+|---|---|
+| Stock | "NVDA NVIDIA Corporation $217.09 +2.96 (+1.38%) Market closed" with the day's chart |
+| Crypto | "BTC Bitcoin $81,603.00 −0.94% 24h" with the 24-hour chart |
+| Weather | New York, 53°, clear, feels like 49°, plus a 5-day forecast |
+| Clock | New York time, with London and Tokyo |
+| Countdown | "73 days 04 hours 12 min" to New Year |
+| Timer | 25:00 with Start and Reset |
+
+**The picker, in real Chrome:**
+- It lists all six templates.
+- It rejects a bad symbol with a clear message.
+- It added an AMD 1-month chart, which ran with live data.
+- "Settings" reopened prefilled. Switching to TSLA rebuilt the widget, which ran, and its title updated.
+- At phone width (375 px), More shows "Add a widget" and the picker fits in one column.
+
+**The assistant, with the stand-in:**
+- "Track AMD stock for me" gave a template widget, and the reply quoted its live price.
+- "Show the weather in Tokyo" gave the weather template.
+- Automated: a template widget can be re-configured with new settings, and bad settings come back as readable errors.
+
+**Security fix found by a test:** a template setting containing `</script>` could have broken out of the widget's
+script. Settings are now escaped. A test feeds in a hostile label and checks that it stays inside, and still reads back
+exactly.
 
 ### Pi installer (extra)
 

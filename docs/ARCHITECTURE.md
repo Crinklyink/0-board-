@@ -22,7 +22,7 @@ The server runs on Node 24 with one npm dependency (`ws`). It uses the built-in 
 | `widgets.js` | Data proxy for widgets, and their status reports |
 | `secrets.js` | API keys for widgets (kept outside the database) |
 | `ai/agent.js` | The Gemini turn loop |
-| `ai/tools.js` | The 30 canvas tools |
+| `ai/tools.js` | The 31 canvas tools |
 | `ai/live.js` | Gemini Live ephemeral tokens and tool calls |
 | `ai/pending.js` | Confirmation of destructive changes |
 | `ai/context.js` | Board summary for the prompt |
@@ -109,7 +109,7 @@ survives tool calls.
 | Change | `edit_object`, `move_objects`, `resize_object`, `organize_objects` |
 | Remove and history | `delete_objects`, `undo_ai_change`, `redo_ai_change`, `list_versions`, `restore_version`, `forget_recent` ("don't save that") |
 | TV and boards | `focus_tv`, `switch_board`, `create_board` |
-| Widgets | `create_widget`, `update_widget`, `read_widget_logs`, `list_api_keys`, `request_api_key` |
+| Widgets | `add_widget` (templates), `create_widget` (custom code), `update_widget`, `read_widget_logs`, `list_api_keys`, `request_api_key` |
 | Confirmation | `resolve_pending` |
 
 **Safety rules:**
@@ -151,6 +151,18 @@ has a small saved `state`. It syncs, undoes and backs up like any other object.
 | `ob.onResize()` | Called when the widget is resized |
 
 Chart.js 4 is preloaded (`web/vendor/chart.umd.min.js`, checked against npm's integrity hash).
+
+`ob.kit` and `css/widget.css` provide formatters, a styled line chart and layout classes. Templates and custom widgets
+therefore share one look.
+
+**Templates** (`web/shared/widget-templates.js`, shared by the Pi and the board):
+- The six templates are stock, crypto, weather, clock, countdown and timer.
+- Each is ordinary code plus a settings list. `buildWidget(name, params)` checks the settings and embeds them safely in
+  the widget's script.
+- A widget remembers its `template` and `params`, so "switch it to AMD" or the Settings button rebuilds it with new
+  settings.
+- The assistant uses `add_widget` for these and writes code with `create_widget` only when none fits.
+- `tools/check-widgets.mjs` runs every template against live data in headless Chrome.
 
 **Data proxy** (`POST /api/widgets/fetch`):
 - The Pi makes the request and keeps short-lived answers in a cache, so the TV and phone share one upstream request.

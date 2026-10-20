@@ -5,6 +5,7 @@ import {
 } from '../../../web/shared/schema.js';
 import { findFreeSpot, nextFlowSlot, layoutGrid, layoutColumns, layoutGraph } from '../../../web/shared/layout.js';
 import { boardContext } from './context.js';
+import { WIDGET_TEMPLATES, TEMPLATE_NAMES, buildWidget, templateGuide } from '../../../web/shared/widget-templates.js';
 import { isImageMime } from '../assets.js';
 
 export class ToolError extends Error {}
@@ -735,6 +736,20 @@ def('forget_recent',
 
 const WIDGET_WAIT_MS = 9000;
 
+// Gemini needs every property of an object parameter spelled out, so the template settings are listed from the
+// templates themselves (one flat object; each key says which template uses it).
+const TEMPLATE_PARAMS = {};
+for (const [tname, t] of Object.entries(WIDGET_TEMPLATES)) {
+  for (const [k, spec] of Object.entries(t.params)) {
+    const what = spec.kind === 'choice' ? `one of ${spec.options.join(', ')}` : spec.kind === 'number' ? `${spec.min} to ${spec.max}`
+      : spec.kind === 'zones' ? 'comma-separated IANA time zones, e.g. "America/New_York, Asia/Tokyo"'
+        : spec.kind === 'datetime' ? 'date or local date-time, e.g. 2026-12-25T09:30' : `e.g. ${spec.hint}`;
+    const isNumber = spec.kind === 'number' || (spec.kind === 'choice' && typeof spec.options[0] === 'number');
+    const prev = TEMPLATE_PARAMS[k]?.description;
+    TEMPLATE_PARAMS[k] = (isNumber ? N : S)(`${prev ? `${prev}; ` : ''}${tname}: ${what}`);
+  }
+}
+
 /** Quick checks that catch the usual mistakes before the code ever runs. */
 function checkWidgetHtml(html) {
   const code = reqStr(html, 'html', WIDGET_HTML_MAX);
@@ -781,18 +796,52 @@ def('create_widget',
     return { ok: true, id: obj.id, ...(await firstRun(ctx, obj.id, html)) };
   });
 
+def('add_widget',
+  `Put a ready-made, tested widget on the board. Prefer this over create_widget whenever a template fits: it always works and looks right.\n${templateGuide()}`,
+  O({
+    template: S('Template name', { enum: TEMPLATE_NAMES }),
+    params: O(TEMPLATE_PARAMS, [], 'Template settings; only the ones for the chosen template'),
+    title: S('Optional title (a good one is chosen automatically)'),
+    nearId: S('Place next to this object id'),
+  }, ['template']),
+  async (a, ctx) => {
+    let built;
+    try { built = buildWidget(a.template, a.params || {}); } catch (e) { throw new ToolError(e.message); }
+    const title = optStr(a.title, 'title', 200) || built.title;
+    let anchor = ctx.anchor();
+    if (a.nearId) { const t = ctx.must(a.nearId); anchor = { x: t.x + t.w + 60 + built.w / 2, y: t.y + t.h / 2 }; }
+    const spot = findFreeSpot(ctx.obstacles(), built.w, built.h, anchor);
+    const obj = {
+      id: nid('w_'), type: 'widget', title, html: built.html, template: built.template, params: built.params,
+      x: Math.round(spot.x), y: Math.round(spot.y), w: built.w, h: built.h, origin: 'ai',
+    };
+    ctx.apply([{ op: 'put', obj }], `Added widget: ${snip(title, 40)}`);
+    return { ok: true, id: obj.id, template: built.template, params: built.params, ...(await firstRun(ctx, obj.id, built.html)) };
+  });
+
 def('update_widget',
-  'Change a widget: replace its code (to fix an error or add a feature), rename it, or resize it. Returns what happened when the new code first ran.',
-  O({ id: S('Widget id'), html: S('Complete new code (not a diff)'), title: S('New title'), w: N('New width'), h: N('New height') }, ['id']),
+  'Change a widget: new settings for a template widget (params, e.g. a different symbol or city), or replace a custom widget\'s code to fix an error or add a feature; also rename or resize. Returns what happened when the new version first ran.',
+  O({ id: S('Widget id'), params: O(TEMPLATE_PARAMS, [], 'New settings for a template widget (merged with the current ones)'), html: S('Complete new code (not a diff); turns a template widget into a custom one'), title: S('New title'), w: N('New width'), h: N('New height') }, ['id']),
   async (a, ctx) => {
     const o = ctx.must(a.id);
     if (o.type !== 'widget') throw new ToolError(`${a.id} is a ${o.type}, not a widget`);
     const set = {};
-    if (a.html !== undefined) set.html = checkWidgetHtml(a.html);
+    if (a.params && typeof a.params === 'object' && a.html === undefined) {
+      if (!o.template) throw new ToolError('This widget was written by hand, not from a template: change its html instead.');
+      let built;
+      try { built = buildWidget(o.template, { ...(o.params || {}), ...a.params }); } catch (e) { throw new ToolError(e.message); }
+      set.html = built.html;
+      set.params = built.params;
+      if (o.title === WIDGET_TEMPLATES[o.template].title(o.params || {}) || !o.title) set.title = built.title;
+    }
+    if (a.html !== undefined) {
+      set.html = checkWidgetHtml(a.html);
+      if (o.template) { set.template = null; set.params = null; }
+    }
     if (a.title !== undefined) set.title = reqStr(a.title, 'title', 200);
     if (num(a.w) !== undefined) set.w = clamp(Math.round(a.w), 200, 1600);
     if (num(a.h) !== undefined) set.h = clamp(Math.round(a.h), 120, 1200);
-    if (!Object.keys(set).length) throw new ToolError('Nothing to change: pass html, title, w or h');
+    if (!Object.keys(set).length) throw new ToolError('Nothing to change: pass params, html, title, w or h');
     ctx.apply([{ op: 'patch', id: o.id, set }], `Updated widget: ${snip(set.title || o.title, 40)}`);
     if (set.html === undefined || set.html === o.html) return { ok: true, id: o.id, status: 'updated' };
     return { ok: true, id: o.id, ...(await firstRun(ctx, o.id, set.html)) };
@@ -904,5 +953,5 @@ export async function runTool(name, args, ctx) {
 export const MUTATING = new Set([
   'add_notes', 'create_diagram', 'connect_objects', 'create_section', 'group_into_section', 'edit_object', 'move_objects',
   'resize_object', 'organize_objects', 'delete_objects', 'undo_ai_change', 'redo_ai_change', 'restore_version', 'resolve_pending',
-  'create_widget', 'update_widget',
+  'create_widget', 'add_widget', 'update_widget',
 ]);

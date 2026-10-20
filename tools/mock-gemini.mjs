@@ -31,16 +31,25 @@ function respond(body) {
   if (sawTool) {
     const fr = last.parts.find((p) => p.functionResponse).functionResponse;
     if (fr.response?.status === 'needs_confirmation') return [say('That would remove several things. Want me to go ahead?')];
-    if (fr.name === 'create_widget' && fr.response?.ok) {
+    if ((fr.name === 'create_widget' || fr.name === 'add_widget') && fr.response?.ok) {
       const r = fr.response;
-      if (r.status === 'running') return [say(`NVDA is on the board at ${r.shows.match(/\$[\d,.]+/)?.[0] || 'its latest price'}. It updates every minute.`)];
+      if (r.status === 'running') {
+        const price = r.shows.match(/[$€£][\d,.]+/)?.[0];
+        return [say(price ? `It's on the board at ${price}. It updates by itself.` : 'It is on the board and running.')];
+      }
       if (r.status === 'error') return [say(`The widget hit an error: ${r.error}`)];
-      return [say('The NVDA widget is on the board. It starts when the TV shows it.')];
+      return [say('The widget is on the board. It starts when the TV shows it.')];
     }
     return [say(fr.response?.ok === false ? `I hit a problem: ${fr.response.error}` : 'Done. It is on the board now.')];
   }
+  // Widgets: templates for the usual requests, hand-written code for "custom".
+  if (/custom widget/.test(text)) return [call('create_widget', { title: 'NVDA live', html: NVDA_WIDGET, w: 440, h: 300 })];
+  if (/weather/.test(text)) return [call('add_widget', { template: 'weather', params: { place: text.match(/weather (?:in|for) ([a-z ]+)/)?.[1]?.trim() || 'London' } })];
+  if (/timer/.test(text)) return [call('add_widget', { template: 'timer', params: { minutes: Number(text.match(/(\d+) ?min/)?.[1] || 25) } })];
+  if (/bitcoin|btc|crypto|ethereum/.test(text)) return [call('add_widget', { template: 'crypto', params: { coin: /eth/.test(text) ? 'ETH' : 'BTC' } })];
   if (/track|ticker|stock|nvda|widget/.test(text)) {
-    return [call('create_widget', { title: 'NVDA live', html: NVDA_WIDGET, w: 440, h: 300 })];
+    const sym = text.match(/\b(?:track|ticker for|stock) ([a-z]{1,5})\b/)?.[1];
+    return [call('add_widget', { template: 'stock', params: { symbol: sym && !['for', 'the', 'my'].includes(sym) ? sym.toUpperCase() : 'NVDA' } })];
   }
   if (/diagram/.test(text)) {
     return [call('create_diagram', {

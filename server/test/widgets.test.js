@@ -6,6 +6,7 @@ import path from 'node:path';
 import { startServer, wsClient, startMockGemini, call, say, pairPhone, sleep } from './helpers.js';
 import { codeHash, normalizeObject, objectText, SchemaError } from '../../web/shared/schema.js';
 import { isPrivateAddress } from '../src/widgets.js';
+import { TEMPLATE_NAMES, buildWidget, TemplateError } from '../../web/shared/widget-templates.js';
 
 /** A stand-in for a third-party API: echoes what it received and counts hits. */
 async function fakeApi() {
@@ -34,6 +35,80 @@ test('schema: widgets are first-class objects with size limits; their title is s
   assert.throws(() => normalizeObject({ id: 'w_test00004', type: 'widget', x: 0, y: 0 }), SchemaError, 'html is required');
   assert.equal(codeHash('abc'), codeHash('abc'));
   assert.notEqual(codeHash('abc'), codeHash('abd'));
+});
+
+test('templates: every one builds a valid widget; settings are checked; hostile text cannot break out of the script', () => {
+  const samples = {
+    stock: { symbol: 'nvda' }, crypto: { coin: 'eth', days: '7' }, weather: { place: 'Paris', units: 'fahrenheit' },
+    clock: { zones: 'Europe/London, Asia/Tokyo' }, countdown: { label: 'Launch', date: '2027-03-01' }, timer: { minutes: '10' },
+  };
+  for (const name of TEMPLATE_NAMES) {
+    const b = buildWidget(name, samples[name]);
+    const obj = normalizeObject({ id: `w_t_${name}`, type: 'widget', x: 0, y: 0, title: b.title, html: b.html, w: b.w, h: b.h, template: b.template, params: b.params });
+    assert.equal(obj.template, name);
+    assert.match(b.html, /ob\.(every|kit)|setInterval/, `${name} has runtime code`);
+    assert.doesNotMatch(b.html, /(?<!ob\.)\bfetch\s*\(/, `${name} only uses ob.fetch`);
+  }
+  assert.equal(buildWidget('stock', { symbol: 'nvda' }).params.symbol, 'NVDA');
+  assert.equal(buildWidget('crypto', { coin: 'eth', days: '7' }).params.days, 7);
+  assert.equal(buildWidget('countdown', { label: 'x', date: '2027-03-01' }).params.date, '2027-03-01T00:00', 'a plain date means local midnight');
+  assert.throws(() => buildWidget('stock', { symbol: 'no spaces allowed' }), TemplateError);
+  assert.throws(() => buildWidget('clock', { zones: 'Mars/Olympus' }), TemplateError);
+  assert.throws(() => buildWidget('timer', { minutes: 9999 }), TemplateError);
+  assert.throws(() => buildWidget('weather', {}), /needs "place"/);
+  assert.throws(() => buildWidget('nope', {}), /Unknown widget template/);
+
+  const hostile = buildWidget('countdown', { label: 'Hi </script><img src=x onerror=alert(1)>', date: '2027-01-01' });
+  assert.equal((hostile.html.match(/<\/script>/gi) || []).length, 1, 'the label cannot close the script tag');
+  const json = hostile.html.slice(hostile.html.lastIndexOf('})(') + 3, hostile.html.lastIndexOf(');'));
+  assert.equal(JSON.parse(json).label, 'Hi </script><img src=x onerror=alert(1)>', 'and still reads back exactly');
+});
+
+test('add_widget: the assistant uses a template, then re-configures it with new settings', async () => {
+  const mock = await startMockGemini();
+  const seen = [];
+  let widgetId = null;
+  mock.script = (body, idx) => {
+    const fr = body.contents.at(-1).parts.find((p) => p.functionResponse)?.functionResponse;
+    if (fr) seen.push(fr.response);
+    if (idx === 0) return [call('add_widget', { template: 'stock', params: { symbol: 'amd' } })];
+    if (idx === 1) { widgetId = fr.response.id; return [call('update_widget', { id: widgetId, params: { symbol: 'TSLA', range: '5d' } })]; }
+    if (idx === 2) return [call('add_widget', { template: 'stock', params: { symbol: 'not a symbol' } })];
+    return [say('Done.')];
+  };
+  const s = await startServer({ gemini: { apiKey: 'k', baseUrl: mock.baseUrl } });
+  try {
+    const phone = await pairPhone(s);
+    const boardId = s.app.hub.display.boardId;
+    const screen = wsClient(s.base, phone);
+    await screen.open;
+    screen.send({ t: 'sub', board: boardId, rev: -1 });
+    await screen.waitFor((m) => m.t === 'board' || m.t === 'delta');
+    screen.ws.on('message', async (d) => {
+      const m = JSON.parse(d.toString());
+      if (m.t !== 'ops') return;
+      for (const op of m.ops) {
+        const html = op.op === 'put' ? op.obj.html : op.set?.html;
+        if (!html) continue;
+        const sym = html.match(/"symbol":"([A-Z]+)"/)?.[1];
+        await s.call('POST', `/api/widgets/${op.op === 'put' ? op.obj.id : op.id}/report`, { boardId, hash: codeHash(html), level: 'ready', text: `${sym} $100.00` }, { tok: phone });
+      }
+    });
+    const r = await s.call('POST', '/api/ai/message', { boardId, text: 'track AMD' }, { tok: phone });
+    await screen.waitFor((m) => m.t === 'ai' && m.ev === 'done' && m.turnId === r.json.turnId, 30000);
+
+    assert.equal(seen[0].status, 'running');
+    assert.deepEqual(seen[0].params, { symbol: 'AMD', range: '1d' });
+    assert.equal(seen[1].status, 'running');
+    assert.match(seen[1].shows, /TSLA/);
+    assert.equal(seen[2].ok, false, 'bad settings come back as a readable error');
+    assert.match(seen[2].error, /not a valid symbol/);
+    const w = s.app.store.getObject(boardId, widgetId);
+    assert.equal(w.title, 'TSLA live', 'an automatic title follows the new settings');
+    assert.deepEqual(w.params, { symbol: 'TSLA', range: '5d' });
+    assert.equal(w.template, 'stock');
+    await screen.close();
+  } finally { await s.app.close(); await mock.close(); }
 });
 
 test('API keys: added from a phone (never the TV), never returned, never in backups', async () => {

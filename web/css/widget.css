@@ -35,6 +35,26 @@ input, select { background: var(--surface); border: 1px solid var(--border); bor
 canvas { display: block; }
 ::-webkit-scrollbar { width: 0; height: 0; }
 
+/* Kit layout classes: a consistent look for templates and for widgets the assistant writes. Sizes follow the widget. */
+.kit { height: 100%; display: flex; flex-direction: column; padding: clamp(10px, 4vw, 18px) clamp(12px, 4.5vw, 20px) clamp(8px, 3vw, 12px); min-width: 0; }
+.kit-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.kit-title { font-weight: 650; font-size: clamp(13px, 3.6vw, 17px); letter-spacing: 0.01em; white-space: nowrap; }
+.kit-sub { color: var(--muted); font-size: clamp(11px, 2.9vw, 13px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.kit-big { font-size: clamp(26px, 9vw, 64px); font-weight: 600; letter-spacing: -0.015em; line-height: 1.12; }
+.kit-mid { font-size: clamp(18px, 5.5vw, 30px); font-weight: 550; line-height: 1.2; }
+.kit-delta { font-size: clamp(12px, 3.4vw, 16px); font-weight: 550; margin-left: 8px; white-space: nowrap; }
+.kit-chart { flex: 1; min-height: 0; position: relative; margin-top: 6px; }
+.kit-foot { display: flex; justify-content: space-between; gap: 8px; color: var(--faint); font-size: clamp(10px, 2.6vw, 12px); margin-top: 6px; white-space: nowrap; }
+.kit-row { display: flex; gap: 10px; align-items: baseline; }
+.kit-grid { display: grid; gap: 8px; }
+.kit-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--up); margin-right: 6px; vertical-align: middle; }
+.dot.off { background: var(--faint); }
+
 /* Messages the runtime shows on the widget's behalf (waiting for a key, errors). */
 .ob-msg {
   position: fixed; inset: 0; display: grid; place-content: center; gap: 6px; padding: 18px; text-align: center;

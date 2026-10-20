@@ -95,7 +95,7 @@ html[data-mode="tv"], html[data-mode="tv"] #board { cursor: none; }
 html[data-chrome="min"] .toolbar { bottom: calc(10px + var(--inset-bottom)); }
 /* Narrow screens: Pan, Section and Add move into "More"; very narrow ones also move Draw and Redo there. */
 .toolbar .narrow-only, .more-item.only-xs { display: none; }
-@media (max-width: 620px) {
+@media (max-width: 680px) {
   .toolbar .wide-only { display: none; }
   .toolbar .narrow-only { display: inline-grid; }
 }
@@ -104,6 +104,33 @@ html[data-chrome="min"] .toolbar { bottom: calc(10px + var(--inset-bottom)); }
   .toolbar .not-xs { display: none; }
   .more-item.only-xs { display: flex; }
 }
+/* Add-widget picker */
+.picker { padding: 16px; display: grid; gap: 12px; max-height: min(74vh, 660px); overflow: auto; }
+.picker-form { display: grid; gap: 12px; }
+.picker-head { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15.5px; color: var(--text); }
+.picker-head > span:first-child { display: grid; color: var(--accent-hi); }
+.picker-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 480px) { .picker-grid { grid-template-columns: 1fr; } }
+.pick { text-align: left; padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); display: grid; gap: 4px; }
+.pick:hover, .pick:focus-visible { border-color: var(--accent); }
+.pick b { font-size: 14px; font-weight: 600; color: var(--text); }
+.pick span { font-size: 12.5px; line-height: 1.4; color: var(--text2); }
+.picker-note, .picker-desc { font-size: 12.5px; color: var(--text3); line-height: 1.45; }
+.picker-desc { color: var(--text2); margin-top: -4px; }
+.field { display: grid; gap: 6px; }
+.field label { font-size: 12px; font-weight: 550; color: var(--text2); }
+.field input, .field select {
+  height: 42px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  padding: 0 12px; font: inherit; font-size: 14.5px; outline: none; color-scheme: dark;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.picker-err { min-height: 1.2em; font-size: 12.5px; color: #F08A88; }
+.picker-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn { height: 40px; padding: 0 16px; border-radius: 10px; font-weight: 600; font-size: 14px; background: var(--surface-hi); color: var(--text); border: 1px solid var(--border); }
+.btn:hover { border-color: var(--border-hi); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #05070C; }
+.btn.primary:hover { background: var(--accent-hi); }
+
 .popover.tool-more { flex-direction: column; flex-wrap: nowrap; gap: 2px; width: auto; min-width: 190px; padding: 4px; z-index: 6; }
 .more-item { display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px 0 8px; border-radius: 9px; color: var(--text2); font-size: 14px; font-weight: 550; text-align: left; white-space: nowrap; }
 .more-item:hover { background: var(--surface-hi); color: var(--text); }

@@ -10,7 +10,7 @@ board, and the phone captures, edits and talks.
  │ hold-to-talk, on-device       │  Tailscale  │ boards in SQLite, op log,     │  HTTP   │ full-screen board │
  │ speech (Qwen3-ASR) and voice  │ ──────────▶ │ undo, backups                 │ ──────▶ │ (Chromium kiosk,  │
  │ (Kokoro / Supertonic)         │  HTTP + WS  │ WebSocket live sync           │         │  auto-starts)     │
- │ canvas (same web UI as TV)    │ ◀────────── │ Gemini agent with 30 canvas   │         └──────────────────┘
+ │ canvas (same web UI as TV)    │ ◀────────── │ Gemini agent with 31 canvas   │         └──────────────────┘
  │ remote control for the TV     │             │ tools; the API key lives only │
  └──────────────────────────────┘             │ here                          │ ───▶ Gemini API (internet)
                                               └───────────────────────────────┘
@@ -36,8 +36,10 @@ board, and the phone captures, edits and talks.
     reading photos.
   - Every AI change is one undoable step, and destructive changes ask first. You can say "go back to the earlier
     version" or "don't save that".
-- **Live widgets the assistant builds.** Say "track NVDA" and it writes a small app for the board, such as a ticker
-  with a live chart, the weather, a timer or a tracker.
+- **Live widgets.** Say "track NVDA", or use **Add widget** on the board.
+  - Six tested ready-made widgets: a stock ticker with a chart, crypto, weather with a 5-day forecast, a world clock,
+    a countdown and a shared timer. They need no keys.
+  - For anything else, the assistant writes the widget itself, such as a habit tracker or a different data source.
   - Each widget runs sealed off on the TV and phone, with a chart library built in.
   - The assistant sees whether its widget worked and fixes its own mistakes.
   - If a service needs an API key, a card appears in the app. The key is stored only on the Pi, is sent only to that
@@ -65,14 +67,15 @@ This was built and tested without a physical Fold 7, without a Raspberry Pi, and
 honest list is in [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
 
 **Verified:**
-- 56 automated server tests.
+- 58 automated server tests.
 - The Android app on an emulator (debug and signed release builds), including the unfolded Fold 7 size.
 - On-device speech recognition and voice, with measured speed.
 - Interrupting speech.
 - Touch editing on the canvas.
 - Network failover.
 - The Live and agent flows end to end, against a local stand-in for Gemini.
-- Live widgets in real Chrome and the Android WebView, with real data (an NVDA chart) and the API-key protections.
+- Live widgets in real Chrome and the Android WebView, with real data, including all six ready-made widgets and the
+  API-key protections.
 
 **Not yet tested:**
 - Real Gemini responses.

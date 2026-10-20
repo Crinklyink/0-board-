@@ -93,7 +93,8 @@ export const PROPS = {
   file: { asset: idStr, name: str(300), mime: str(100) },
   link: { url: str(2000), title: str(300) },
   // A live mini-app (ticker, chart, timer...). `html` runs sandboxed on each screen; `state` is its small saved data.
-  widget: { title: str(200), html: str(WIDGET_HTML_MAX), state: jsonObject(WIDGET_STATE_MAX) },
+  // Template widgets also remember which template and settings made them, so they can be re-configured.
+  widget: { title: str(200), html: str(WIDGET_HTML_MAX), state: jsonObject(WIDGET_STATE_MAX), template: str(40), params: jsonObject(2000) },
 };
 
 export const TYPES = Object.keys(PROPS);

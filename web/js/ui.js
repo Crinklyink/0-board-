@@ -2,6 +2,17 @@ import { ICON } from './icons.js';
 import { colorOf, PALETTE_NAMES } from './theme.js';
 import { newId } from './session.js';
 import { NOTE_WIDTH, estimateNoteHeight } from '../shared/schema.js';
+import { WIDGET_TEMPLATES, TEMPLATE_NAMES, buildWidget } from '../shared/widget-templates.js';
+
+const FIELD_LABEL = {
+  symbol: 'Symbol', range: 'Chart range', coin: 'Coin', currency: 'Currency', days: 'Chart range', place: 'Place',
+  units: 'Units', zones: 'Time zones (optional, first is the main one)', label: 'Label', date: 'Date and time', minutes: 'Minutes',
+};
+const CHOICE_LABEL = {
+  '1d': 'Today', '5d': '5 days', '1mo': '1 month', '6mo': '6 months', '1y': '1 year', 1: '24 hours', 7: '7 days', 30: '30 days',
+  usd: 'US dollar', eur: 'Euro', gbp: 'British pound', jpy: 'Japanese yen', cad: 'Canadian dollar', aud: 'Australian dollar',
+  celsius: 'Celsius', fahrenheit: 'Fahrenheit',
+};
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -94,6 +105,7 @@ export class UI {
       t('note', 'note', 'Note', 'N'), t('text', 'text', 'Text', 'T'), (this.shapeBtn = t('shape', 'rect', 'Shape', 'R')),
       t('arrow', 'arrow', 'Arrow', 'A'), t('pen', 'pen', 'Draw', 'P', 'not-xs'), t('frame', 'frame', 'Section', 'F', 'wide-only'),
       h('button', { class: 'tb wide-only', 'aria-label': 'Add image or file', title: 'Add image or file', html: ICON.image, onclick: () => this.pickFile() }),
+      h('button', { class: 'tb wide-only', 'aria-label': 'Add a widget', title: 'Add a widget (stock, weather, clock…)', html: ICON.widget, onclick: () => this.openWidgetPicker() }),
       (this.moreBtn = h('button', { class: 'tb narrow-only', 'aria-label': 'More tools', 'aria-haspopup': 'menu', 'aria-pressed': 'false', title: 'More tools', html: ICON.more, onclick: () => this.moreTools() })),
       h('span', { class: 'sep' }),
       (this.undoBtn = h('button', { class: 'tb', 'aria-label': 'Undo', title: 'Undo  Ctrl+Z', html: ICON.undo, onclick: () => this.s.undo() })),
@@ -163,6 +175,7 @@ export class UI {
       item('pen', 'Draw', () => this.pickTool('pen'), { pressed: tool === 'pen', cls: 'only-xs' }),
       item('frame', 'Section', () => this.pickTool('frame'), { pressed: tool === 'frame' }),
       item('image', 'Add image or file', () => this.pickFile()),
+      item('widget', 'Add a widget', () => this.openWidgetPicker()),
       item('redo', 'Redo', () => this.s.redo(), { cls: 'only-xs' }));
     this.root.append(pop);
     const a = this.moreBtn.getBoundingClientRect();
@@ -356,6 +369,7 @@ export class UI {
     if (single?.type === 'widget') {
       const using = this.widgets?.interactive === single.id;
       els.push(h('button', { class: `ctx-text ${using ? 'on' : ''}`, 'aria-pressed': String(using), title: 'Use the widget (double-tap)', onclick: () => { this.widgets?.setInteractive(using ? null : single.id); this.ctxKey = ''; this.updateContext(); } }, h('span', { html: ICON.tap }), h('span', {}, using ? 'Done' : 'Use')));
+      if (single.template && WIDGET_TEMPLATES[single.template]) els.push(this.iconBtn('sliders', 'Widget settings', () => this.openWidgetPicker(single.id)));
       els.push(this.iconBtn('refresh', 'Reload widget', () => this.widgets?.reload(single.id)));
       if (this.full) els.push(this.iconBtn('ask', 'Ask the assistant to change this widget', () => this.openAsk(`Change the "${single.title || 'widget'}" widget: `)));
     }
@@ -486,6 +500,84 @@ export class UI {
     this.overlay.replaceChildren(h('div', { class: 'scrim', onclick: () => this.closeOverlay() }), form);
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  /**
+   * Ready-made widgets (stock, crypto, weather, clock, countdown, timer): pick one, fill in a setting or two, done.
+   * With `editId`, it changes the settings of an existing template widget instead.
+   */
+  openWidgetPicker(editId = null) {
+    if (this.tv || this.remote) return;
+    const editing = editId ? this.s.model.get(editId) : null;
+    this.overlay.className = 'overlay sheet-wrap';
+    this.overlay.hidden = false;
+    const body = h('div', { class: 'picker' });
+    const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-label': editing ? 'Widget settings' : 'Add a widget' }, body);
+    this.overlay.replaceChildren(h('div', { class: 'scrim', onclick: () => this.closeOverlay() }), sheet);
+
+    const showList = () => {
+      body.replaceChildren(
+        h('div', { class: 'picker-head' }, h('span', { html: ICON.widget }), h('span', {}, 'Add a widget')),
+        h('div', { class: 'picker-grid' }, TEMPLATE_NAMES.map((name) => h('button', { class: 'pick', onclick: () => showForm(name) },
+          h('b', {}, WIDGET_TEMPLATES[name].label), h('span', {}, WIDGET_TEMPLATES[name].description)))),
+        h('div', { class: 'picker-note' }, 'Want something else? Ask the assistant to build it, for example "a habit tracker for my runs".'),
+      );
+    };
+
+    const showForm = (name, current = {}) => {
+      const t = WIDGET_TEMPLATES[name];
+      const inputs = {};
+      const fields = Object.entries(t.params).map(([key, spec]) => {
+        const id = `wp-${key}`;
+        let input;
+        const cur = current[key] ?? (spec.kind === 'choice' || spec.kind === 'number' ? spec.def : '');
+        if (spec.kind === 'choice') {
+          input = h('select', { id }, spec.options.map((o) => h('option', { value: String(o), selected: String(o) === String(cur) }, CHOICE_LABEL[o] || String(o))));
+        } else if (spec.kind === 'datetime') {
+          input = h('input', { id, type: 'datetime-local', value: String(cur || '').slice(0, 16) });
+        } else {
+          input = h('input', {
+            id, type: spec.kind === 'number' ? 'number' : 'text', value: Array.isArray(cur) ? cur.join(', ') : String(cur ?? ''),
+            placeholder: spec.hint || '', autocomplete: 'off', autocapitalize: spec.upper ? 'characters' : 'off', spellcheck: 'false',
+            ...(spec.kind === 'number' ? { min: spec.min, max: spec.max, step: 1 } : {}),
+          });
+        }
+        inputs[key] = input;
+        return h('div', { class: 'field' }, h('label', { for: id }, FIELD_LABEL[key] || key), input);
+      });
+      const err = h('div', { class: 'picker-err', role: 'alert' });
+      for (const el of Object.values(inputs)) el.addEventListener('input', () => { err.textContent = ''; });
+      const submit = (e) => {
+        e.preventDefault();
+        const raw = Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value]));
+        let built;
+        try { built = buildWidget(name, raw); } catch (ex) { err.textContent = ex.message; return; }
+        if (editing) {
+          const set = { html: built.html, params: built.params, template: name };
+          if (!editing.title || editing.title === WIDGET_TEMPLATES[name].title(editing.params || {})) set.title = built.title;
+          this.s.commit([{ op: 'patch', id: editing.id, set }], { label: 'Widget settings' });
+        } else {
+          const spot = this.s.freeSpot(built.w, built.h);
+          const obj = { id: newId('w'), type: 'widget', title: built.title, html: built.html, template: name, params: built.params, x: Math.round(spot.x), y: Math.round(spot.y), w: built.w, h: built.h };
+          this.s.create(obj, `Add ${t.label.toLowerCase()} widget`);
+          this.s.setSelection([obj.id]);
+        }
+        this.closeOverlay();
+      };
+      body.replaceChildren(h('form', { class: 'picker-form', onsubmit: submit },
+        h('div', { class: 'picker-head' },
+          editing ? null : h('button', { type: 'button', class: 'ib', 'aria-label': 'Back', html: ICON.chevron, style: 'transform: rotate(90deg)', onclick: showList }),
+          h('span', {}, editing ? `${t.label} settings` : t.label)),
+        h('div', { class: 'picker-desc' }, t.description),
+        ...fields, err,
+        h('div', { class: 'picker-actions' },
+          h('button', { type: 'button', class: 'btn', onclick: () => this.closeOverlay() }, 'Cancel'),
+          h('button', { type: 'submit', class: 'btn primary' }, editing ? 'Save' : 'Add to board'))));
+      setTimeout(() => Object.values(inputs)[0]?.focus(), 30);
+    };
+
+    if (editing?.template && WIDGET_TEMPLATES[editing.template]) showForm(editing.template, editing.params || {});
+    else showList();
   }
 
   openSearch() {
