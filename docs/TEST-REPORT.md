@@ -1,6 +1,21 @@
 # Test report
 
-Version 0.3.0, 19 October 2026. A test is marked as passing only if it actually ran.
+Version 0.4.0, 19 October 2026. A test is marked as passing only if it actually ran.
+
+## v0.4 verification
+
+- **PASSED — server:** `cd server && npm test`: 73 tests. The 15 new tests cover task validation, real calendar dates, templates and rollback, task sync/search/undo and restart, memory persistence/export/import and concurrent-edit rejection, memory merge recovery, rapid backup requests, stale in-flight connection tests, migration from the v0.3 schema, protected AI edits, credential isolation and redacted diagnostic failures. One test confirms the real agent request includes project memory after the original conversation has fallen out of its 24-message history window.
+- **PASSED — browser:** `node tools/check-productivity.mjs`, in isolated headless Chrome. Created a project template through the picker; added a task with detail/priority/date; clicked its actual canvas checkbox; checked saved status and undo/redo. Repeated Complete/Reopen through the selection menu. Task list progress, search, status/overdue filters, completion and live edits passed. Saved/reopened memory, merged independent edits and resolved a conflicting field with an explicit choice; unsaved text was preserved and the choice buttons remained visible above the footer. Saved a stand-in key and tested model access through the setup UI. At 375 px the menu, task list and task/memory sheets fit. No uncaught JavaScript errors. Screenshots are in `dist/qa-v0.4/`.
+- **PASSED — Android builds:** debug (arm64 + x86_64) and signed, minified arm64 release, version 0.4.0 (4).
+- **PASSED — Android lint:** `lintRelease`: zero errors, 17 existing warnings. The check found API 31 audio-routing calls that were unguarded on Android 10/11; these now use an SDK guard and a legacy routing fallback. A malformed local SDK property was corrected. Release lint now aborts on errors.
+- **PASSED — APK:** signature verifies, signer matches v0.3.0, `zipalign -c -P 16 4` succeeds; `aapt2` confirms package `app.oboard`, version 0.4.0 (4), minSdk 29, targetSdk 36 and arm64-v8a only. APK SHA-256: `c0ad8efcf2b3e24ebf0f087322e1adff8cd8f5760f07ec44603591a781dcdecb`.
+- **PASSED — Android emulator setup:** installed the debug APK; paired to an isolated QA server by link and landed in the new diagnostics screen. The phone showed microphone permission and installed ASR/TTS/VAD status. Entered a stand-in key through the masked native input and ran the model-access check successfully. This used the local Gemini stand-in, not Google.
+- **PASSED — Android productivity screens:** at 1080×2520, created a project through the native template picker, saved project memory through the WebView and added a task through the native canvas menu; verified all three in the QA server's persisted state. HTML dialogs now hide the overlaid canvas mic and keep Save buttons visible. Also checked the 2184×1968 unfolded canvas/conversation layout. Screenshots are in `dist/qa-v0.4/android-*.png`.
+- **PASSED — Pi distribution:** `node scripts/package.mjs` and `node tools/check-package.mjs`. The extracted archive booted a fresh server, paired a test phone, created a template with task cards, saved memory and returned diagnostics. Installer permissions are executable and line endings are Unix. The archive contains no credential files, databases or signing keys.
+- **PASSED — installer syntax:** `bash -n pi/install.sh` under WSL.
+- **NOT RUN — real Gemini, physical Fold 7, physical Pi/TV:** no key or devices were available for these tests. Model-list diagnostics check key acceptance and listed model capabilities; they do not prove generation quality or a successful Live audio session.
+
+The A–I details below record earlier release checks. Their device/voice timing measurements and v0.3 APK checksum are historical; they were not remeasured for v0.4.
 
 **Test environment:**
 - Windows 11 PC: AMD, 16 logical cores, no NVIDIA GPU.
@@ -32,7 +47,7 @@ it does **not** prove that real Gemini makes good choices.
 | H. Recovery: reconnect, interrupt, restart | **Pass** for each part tested (details below) |
 | I. APK: signed, installable, compatible | **Pass** for build, signature, alignment and the emulator. **Not installed on a physical Fold 7** |
 
-Automated suite: `cd server && npm test` runs **58 tests, 58 pass**. They cover the store, the server, widgets and API keys, the AI tools
+Automated suite: `cd server && npm test` runs **73 tests, 73 pass**. They cover the store, the server, widgets and API keys, the AI tools
 (against the stand-in), and layout and schema.
 
 ## Details

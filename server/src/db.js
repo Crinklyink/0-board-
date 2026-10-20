@@ -114,6 +114,8 @@ const MIGRATIONS = [
   CREATE VIRTUAL TABLE fts_obj USING fts5(body, tokenize='porter unicode61');
   CREATE VIRTUAL TABLE fts_msg USING fts5(body, tokenize='porter unicode61');
   `,
+  `ALTER TABLE boards ADD COLUMN memory TEXT NOT NULL DEFAULT '{}';
+   ALTER TABLE boards ADD COLUMN memory_rev INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function openDb(dataDir) {

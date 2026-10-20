@@ -3,6 +3,7 @@ import { colorOf, PALETTE_NAMES } from './theme.js';
 import { newId } from './session.js';
 import { NOTE_WIDTH, estimateNoteHeight } from '../shared/schema.js';
 import { WIDGET_TEMPLATES, TEMPLATE_NAMES, buildWidget } from '../shared/widget-templates.js';
+import { openTask, openTasks, openMemory, openNewBoard, openDiagnostics } from './productivity.js';
 
 const FIELD_LABEL = {
   symbol: 'Symbol', range: 'Chart range', coin: 'Coin', currency: 'Currency', days: 'Chart range', place: 'Place',
@@ -31,6 +32,7 @@ function h(tag, attrs = {}, ...kids) {
 }
 
 const TOOL_LABEL = {
+  add_tasks: 'Adding tasks', update_task: 'Updating task', update_project_memory: 'Saving project memory',
   add_notes: 'Adding notes', create_diagram: 'Drawing a diagram', connect_objects: 'Connecting', organize_objects: 'Organizing',
   group_into_section: 'Grouping', create_section: 'Adding a section', move_objects: 'Moving things', resize_object: 'Resizing',
   edit_object: 'Editing', delete_objects: 'Checking what to delete', search_board: 'Searching the board', read_board: 'Reading the board',
@@ -77,6 +79,7 @@ export class UI {
         this.iconBtn('plus', 'Zoom in', () => this.s.camera.animateTo({ x: this.s.camera.x, y: this.s.camera.y, z: this.s.camera.z * 1.4 }, 180)),
         this.iconBtn('fit', 'Fit everything', () => this.s.fitContent(true)));
       this.topRight = h('div', { class: 'top-actions' },
+        this.iconBtn('sliders', 'Setup & diagnostics', () => openDiagnostics(this)),
         this.iconBtn('search', 'Search (Ctrl+K)', () => this.openSearch()),
         this.iconBtn('ask', 'Ask the assistant (/)', () => this.openAsk()),
         this.iconBtn('tv', 'Show this board on the TV', () => this.showOnTv()));
@@ -106,6 +109,9 @@ export class UI {
       t('arrow', 'arrow', 'Arrow', 'A'), t('pen', 'pen', 'Draw', 'P', 'not-xs'), t('frame', 'frame', 'Section', 'F', 'wide-only'),
       h('button', { class: 'tb wide-only', 'aria-label': 'Add image or file', title: 'Add image or file', html: ICON.image, onclick: () => this.pickFile() }),
       h('button', { class: 'tb wide-only', 'aria-label': 'Add a widget', title: 'Add a widget (stock, weather, clock…)', html: ICON.widget, onclick: () => this.openWidgetPicker() }),
+      h('button', { class: 'tb wide-only', 'aria-label': 'Add task', title: 'Add task', html: ICON.task, onclick: () => openTask(this) }),
+      h('button', { class: 'tb wide-only', 'aria-label': 'Project memory', title: 'Project memory', html: ICON.memory, onclick: () => openMemory(this) }),
+      h('button', { class: 'tb wide-only', 'aria-label': 'Task list', title: 'Task list and progress', html: ICON.list, onclick: () => openTasks(this) }),
       (this.moreBtn = h('button', { class: 'tb narrow-only', 'aria-label': 'More tools', 'aria-haspopup': 'menu', 'aria-pressed': 'false', title: 'More tools', html: ICON.more, onclick: () => this.moreTools() })),
       h('span', { class: 'sep' }),
       (this.undoBtn = h('button', { class: 'tb', 'aria-label': 'Undo', title: 'Undo  Ctrl+Z', html: ICON.undo, onclick: () => this.s.undo() })),
@@ -176,6 +182,10 @@ export class UI {
       item('frame', 'Section', () => this.pickTool('frame'), { pressed: tool === 'frame' }),
       item('image', 'Add image or file', () => this.pickFile()),
       item('widget', 'Add a widget', () => this.openWidgetPicker()),
+      item('task', 'Add task', () => openTask(this)),
+      item('list', 'Task list', () => openTasks(this)),
+      item('memory', 'Project memory', () => openMemory(this)),
+      item('sliders', 'Setup & diagnostics', () => openDiagnostics(this)),
       item('redo', 'Redo', () => this.s.redo(), { cls: 'only-xs' }));
     this.root.append(pop);
     const a = this.moreBtn.getBoundingClientRect();
@@ -249,6 +259,7 @@ export class UI {
     const o = this.s.model.get(id);
     if (!o) return;
     if (o.type === 'link') { this.openLink(o.url); return; }
+    if (o.type === 'task') { openTask(this, id); return; }
     if (o.type === 'image' || o.type === 'file') { this.openAsset(o); return; }
     if (o.type === 'widget') { this.s.setSelection([id]); this.widgets?.setInteractive(id); this.updateContext(); return; }
     if (this.remote) { this.editor.start(id); return; }
@@ -322,7 +333,7 @@ export class UI {
     const objs = ids.map((id) => this.s.model.get(id)).filter(Boolean);
     if (!objs.length || this.editor.editing) { this.ctx.hidden = true; return; }
     this.ctx.hidden = false;
-    const key = objs.map((o) => `${o.id}:${o.color}:${o.size}:${o.tag}:${o.dash}:${o.head}:${o.locked}`).join('|') + `:${this.widgets?.interactive || ''}`;
+    const key = objs.map((o) => `${o.id}:${o.color}:${o.size}:${o.tag}:${o.dash}:${o.head}:${o.locked}:${o.status}`).join('|') + `:${this.widgets?.interactive || ''}`;
     if (key !== this.ctxKey) { this.ctxKey = key; this.buildContext(objs); }
     const union = this.s.model.contentBounds(ids);
     if (!union) return;
@@ -346,6 +357,11 @@ export class UI {
     const colorable = objs.filter((o) => ['note', 'shape', 'frame', 'text', 'arrow', 'draw'].includes(o.type));
     const single = objs.length === 1 ? objs[0] : null;
     this.ctx.replaceChildren();
+    if (single?.type === 'task') {
+      els.push(this.iconBtn('task', single.status === 'done' ? 'Reopen task' : 'Mark task done', () => patch({ status: single.status === 'done' ? 'todo' : 'done' }, 'Task status')));
+      els.push(this.iconBtn('sliders', 'Edit task', () => openTask(this, single.id)));
+    }
+    if (single?.type === 'note' && !single.locked) els.push(this.iconBtn('task', 'Create task from note', () => openTask(this, null, single.id)));
     if (colorable.length) {
       const cur = colorable[0].color || 'default';
       const sw = h('button', { class: 'swatch-btn', 'aria-label': 'Color', title: 'Color', onclick: (e) => this.colorPopover(e.currentTarget, (c) => patch({ color: c }, 'Color')) }, h('i', { style: `background:${colorOf(cur).stroke}; box-shadow: inset 0 0 0 2px ${colorOf(cur).fill}` }));
@@ -480,6 +496,7 @@ export class UI {
   // --------------------------------------------------------------------------------- overlays
 
   closeOverlay() {
+    this.overlayCleanup?.(); this.overlayCleanup = null;
     this.overlay.hidden = true;
     this.overlay.replaceChildren();
     this.overlay.className = 'overlay';
@@ -487,6 +504,7 @@ export class UI {
 
   openAsk(prefill = '') {
     if (this.tv || this.remote) return;
+    this.closeOverlay();
     this.overlay.className = 'overlay ask-wrap';
     this.overlay.hidden = false;
     const input = h('input', { type: 'text', class: 'ask-input', placeholder: 'Ask or tell the assistant…', value: prefill, 'aria-label': 'Message the assistant', autocomplete: 'off', enterkeyhint: 'send' });
@@ -508,6 +526,7 @@ export class UI {
    */
   openWidgetPicker(editId = null) {
     if (this.tv || this.remote) return;
+    this.closeOverlay();
     const editing = editId ? this.s.model.get(editId) : null;
     this.overlay.className = 'overlay sheet-wrap';
     this.overlay.hidden = false;
@@ -582,6 +601,7 @@ export class UI {
 
   openSearch() {
     if (this.tv) return;
+    this.closeOverlay();
     this.overlay.className = 'overlay sheet-wrap';
     this.overlay.hidden = false;
     const input = h('input', { type: 'search', class: 'sheet-input', placeholder: 'Search every board…', 'aria-label': 'Search', autocomplete: 'off' });
@@ -620,6 +640,7 @@ export class UI {
 
   toggleBoards() {
     if (!this.overlay.hidden && this.overlay.classList.contains('menu-wrap')) { this.closeOverlay(); return; }
+    this.closeOverlay();
     this.overlay.className = 'overlay menu-wrap';
     this.overlay.hidden = false;
     this.renderBoardsMenu();
@@ -633,11 +654,7 @@ export class UI {
     const row = (b) => h('div', { class: `menu-row ${b.id === this.s.boardId ? 'active' : ''}` },
       h('button', { class: 'menu-main', role: 'menuitem', onclick: () => { this.s.openBoard(b.id); this.closeOverlay(); } }, h('span', { class: 'menu-name' }, b.name), h('span', { class: 'menu-count' }, String(b.count))),
       this.iconBtn('tv', `Show ${b.name} on the TV`, () => { this.s.net.display({ boardId: b.id }); this.toast(`Showing ${b.name} on the TV`); this.closeOverlay(); }));
-    const name = h('input', { class: 'menu-new', placeholder: 'New board…', 'aria-label': 'New board name', maxlength: '80' });
-    name.addEventListener('keydown', async (e) => {
-      if (e.key !== 'Enter' || !name.value.trim()) return;
-      try { const r = await this.api.post('/api/boards', { name: name.value.trim() }); await this.s.refreshBoards(); this.s.openBoard(r.board.id); this.closeOverlay(); } catch (err) { this.toast(err.message, 'error'); }
-    });
+    const name = h('button', { class: 'menu-new', onclick: () => openNewBoard(this) }, '+ New board from template');
     this.overlay.replaceChildren(h('div', { class: 'scrim clear', onclick: () => this.closeOverlay() }),
       h('div', { class: 'menu', role: 'menu' },
         h('div', { class: 'menu-label' }, 'Thoughts'), ...thoughts.map(row),

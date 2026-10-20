@@ -144,7 +144,7 @@ private fun SpacesSection(vm: AppViewModel, onOpen: (String) -> Unit, selected: 
             items(spaces, key = { it.id }) { b -> BoardRow(vm, b, onOpen, b.id == selected) }
         }
     }
-    if (creating) NameDialog("New space", "Name", "", onDismiss = { creating = false }) { name -> creating = false; vm.createBoard(name) }
+    if (creating) NewBoardDialog(vm, onDismiss = { creating = false })
 }
 
 @Composable

@@ -90,14 +90,14 @@ rm -rf "$APP_DIR.old"; [ -d "$APP_DIR" ] && mv "$APP_DIR" "$APP_DIR.old"
 mv "$APP_DIR.new" "$APP_DIR"
 chmod +x "$APP_DIR"/pi/*.sh
 
-# ---------------------------------------------------------------- settings (the Gemini key lives only here)
+# ---------------------------------------------------------------- settings (a key can also be added later through the app)
 ENV_FILE="$ETC_DIR/oboard.env"
 if [ ! -f "$ENV_FILE" ]; then
   KEY="${GEMINI_API_KEY:-}"
   if [ -z "$KEY" ] && [ -t 0 ]; then
     echo
     echo "Paste your Gemini API key (from https://aistudio.google.com/apikey)."
-    echo "It is stored only on this Pi, readable by root and the oboard service. Leave empty to add it later."
+    echo "It is stored only on this Pi. Leave empty to add it later from the phone's Setup & diagnostics."
     read -r -s -p "GEMINI_API_KEY: " KEY; echo
   fi
   TZ_NAME="$(timedatectl show -p Timezone --value 2>/dev/null || echo UTC)"
@@ -160,7 +160,9 @@ IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.' | head -3 | t
 echo
 say "O Board is running."
 echo "    On this network:  http://$(hostname).local:$PORT   ($IPS)"
-grep -q '^GEMINI_API_KEY=$' "$ENV_FILE" && warn "No Gemini key yet: edit $ENV_FILE, then  sudo systemctl restart oboard"
+if grep -q '^GEMINI_API_KEY=$' "$ENV_FILE" && [ ! -f "$DATA_DIR/server-credentials.json" ]; then
+  warn "No Gemini key yet: pair your phone, then open Settings -> Setup & diagnostics to add it."
+fi
 echo "    Pair your phone:  open the O Board app; the TV shows an 8-digit code."
 echo "    Logs:             journalctl -u oboard -f        Kiosk logs: journalctl -u oboard-kiosk -f"
 echo "    Backups:          $DATA_DIR/backups (every 6 h)  Full backup: sudo $APP_DIR/pi/backup.sh"

@@ -51,6 +51,15 @@ data class BoardInfo(
 data class BoardPreview(val a: Float = 1f, val b: List<List<Float>> = emptyList())
 
 @Serializable
+data class BoardTemplate(val id: String, val name: String, val description: String = "")
+
+@Serializable
+data class DiagnosticCheck(val id: String, val name: String, val status: String, val detail: String, val action: String = "")
+
+@Serializable
+data class DiagnosticReport(val version: String = "", val checkedAt: Long = 0, val checks: List<DiagnosticCheck> = emptyList())
+
+@Serializable
 data class Cam(val x: Double, val y: Double, val z: Double)
 
 @Serializable

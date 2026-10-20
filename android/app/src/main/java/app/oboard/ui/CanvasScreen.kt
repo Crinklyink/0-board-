@@ -59,6 +59,7 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
     var panel by rememberSaveable { mutableStateOf(true) }
     var menu by remember { mutableStateOf(false) }
     var currentBoard by rememberSaveable { mutableStateOf(boardId) }
+    var canvasOverlay by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val topInset = with(density) { WindowInsets.statusBars.getTop(this).toDp().value.toInt() }
     val bottomInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp().value.toInt() }
@@ -66,7 +67,7 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
     val startMic = rememberMicPermission(vm) { vm.micStart() }
     val liveMode = s.voiceEngine == "live"
 
-    BackHandler { onClose() }
+    BackHandler { if (canvasOverlay) controller.closeOverlay() else onClose() }
     // While this board is open, the assistant works on it.
     DisposableEffect(currentBoard) {
         val before = vm.pinnedAiBoard.value
@@ -81,6 +82,7 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
                 controller = controller, modifier = Modifier.fillMaxSize(),
             ) { e ->
                 when (e.type) {
+                    "overlay" -> canvasOverlay = e.data.optBoolean("open")
                     "ready" -> controller.insets(topInset + 56, bottomInset)
                     "board" -> e.data.optString("id").takeIf { it.isNotBlank() }?.let { currentBoard = it }
                 }
@@ -104,6 +106,9 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = O.Bg2) {
                         DropdownMenuItem(text = { Text("Show on TV", color = O.Text) }, onClick = { menu = false; vm.showOnTv(currentBoard) })
                         DropdownMenuItem(text = { Text("Search", color = O.Text) }, onClick = { menu = false; controller.search() })
+                        DropdownMenuItem(text = { Text("Project memory", color = O.Text) }, onClick = { menu = false; controller.memory() })
+                        DropdownMenuItem(text = { Text("Add task", color = O.Text) }, onClick = { menu = false; controller.addTask() })
+                        DropdownMenuItem(text = { Text("Task list", color = O.Text) }, onClick = { menu = false; controller.tasks() })
                         DropdownMenuItem(text = { Text("Fit everything", color = O.Text) }, onClick = { menu = false; controller.fit() })
                         DropdownMenuItem(text = { Text("Add image or file", color = O.Text) }, onClick = { menu = false; controller.pickFile() })
                         if (expanded) DropdownMenuItem(text = { Text(if (panel) "Hide conversation" else "Show conversation", color = O.Text) }, onClick = { menu = false; panel = !panel })
@@ -111,7 +116,7 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
                 }
             }
             // voice: listening/transcript overlay and the mic
-            Column(
+            if (!canvasOverlay) Column(
                 Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 14.dp, bottom = 74.dp),
                 horizontalAlignment = Alignment.End,
             ) {

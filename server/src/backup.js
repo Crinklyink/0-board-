@@ -33,7 +33,9 @@ export class Backups {
   }
 
   create(kind = 'manual') {
-    const name = `oboard-${kind}-${stamp()}.db`;
+    const stem = `oboard-${kind}-${stamp()}`;
+    let name = `${stem}.db`, suffix = 0;
+    while (fs.existsSync(path.join(this.dir, name))) name = `${stem}-${++suffix}.db`;
     const file = path.join(this.dir, name);
     this.db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
     try {

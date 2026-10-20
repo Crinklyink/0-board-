@@ -7,6 +7,16 @@ O Board has three parts:
 
 ## Server (`server/`)
 
+### v0.4 productivity and setup
+
+- SQLite migration 2 adds `boards.memory` and `boards.memory_rev`; existing boards and objects are preserved. Memory has four editable text fields (`goal`, `decisions`, `questions`, `nextSteps`, at most 4,000 characters each), a timestamp and editor identity. `PUT /api/boards/:id/memory` requires the revision returned by GET; stale saves return 409. Memory is included in board JSON, board exports/imports and database backups, and in text/Live board context. It is independent of canvas snapshots and undo.
+- `task` is a first-class shared schema type: `text`, `detail`, `status` (`todo/doing/done`), `priority` (`low/normal/high`) and optional calendar date `due`. It uses the normal op log, WebSocket sync, offline outbox, full-text index, snapshots and undo. The renderer and task form are shared by the TV, browser and Android WebView. The task list subscribes to model changes for progress, search, status/overdue filters and completion; its subscriptions are disposed when the overlay closes.
+- `web/shared/project-memory.js` performs a three-way merge of the original memory, unsaved draft and latest server state after a 409. Independent fields merge; simultaneous edits to the same field require an explicit user choice before saving with the latest revision.
+- `web/shared/board-templates.js` owns the six starter layouts. `GET /api/board-templates` exposes names/descriptions; `POST /api/boards` accepts `template`. Creation validates the template and stores all starter objects in one database transaction. Android reads the list from the server; the web client uses the shared module.
+- AI tools `add_tasks`, `update_task` and `update_project_memory` use the same validated store. `create_board` also accepts templates. Appending memory preserves its existing text; replacing non-empty memory or substantial user-written task details uses the existing confirmation flow.
+- `setup.js` owns the server-only credential file. `PUT /api/setup/gemini-key` saves the key without restarting, outside SQLite and widget keys. `GET /api/diagnostics` checks the server, database, disk, display, key presence and backup age; `POST /api/diagnostics/gemini` makes a bounded model-list request. Its result verifies key acceptance and model listing, not a real generated response. Raw upstream errors are never exposed by this test. Android adds local microphone permission and model-install checks.
+- Dev verification: `npm test` and `node tools/check-productivity.mjs` (isolated Chrome checks and screenshots, using a local Gemini stand-in).
+
 The server runs on Node 24 with one npm dependency (`ws`). It uses the built-in `node:sqlite` with WAL and
 `synchronous=FULL`, so a power cut cannot lose an acknowledged change.
 

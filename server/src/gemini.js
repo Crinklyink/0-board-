@@ -106,8 +106,8 @@ export class Gemini {
     return body;
   }
 
-  async listModels() {
-    const res = await fetch(`${this.cfg.baseUrl}/v1beta/models?pageSize=200`, { headers: { 'x-goog-api-key': this.cfg.apiKey } });
+  async listModels(signal) {
+    const res = await fetch(`${this.cfg.baseUrl}/v1beta/models?pageSize=200`, { headers: { 'x-goog-api-key': this.cfg.apiKey }, signal });
     if (!res.ok) throw new GeminiError(res.status, (await res.text()).slice(0, 300));
     const json = await res.json();
     return (json.models || []).map((m) => ({

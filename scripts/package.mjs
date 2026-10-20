@@ -18,12 +18,12 @@ const stage = path.join(dist, 'stage', 'oboard');
 fs.rmSync(path.join(dist, 'stage'), { recursive: true, force: true });
 fs.mkdirSync(stage, { recursive: true });
 
-const skip = new Set(['data', '.env', 'test', '.devdata']);
+const skip = new Set(['data', '.env', 'test', '.devdata', 'server-credentials.json', 'server-credentials.json.tmp', 'secrets.json', 'display.token']);
 for (const rel of ['server', 'web', 'pi', 'docs', 'README.md', 'LICENSE']) {
   if (!fs.existsSync(path.join(root, rel))) continue;
   fs.cpSync(path.join(root, rel), path.join(stage, rel), {
     recursive: true,
-    filter: (p) => !skip.has(path.basename(p)) && !p.endsWith('.log'),
+    filter: (p) => !skip.has(path.basename(p)) && !/\.(?:log|db(?:-wal|-shm)?)$/.test(p),
   });
 }
 if (!fs.existsSync(path.join(stage, 'server/node_modules/ws'))) {

@@ -104,7 +104,7 @@ function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 
-const TEXT_PROP = { note: 'text', text: 'text', shape: 'text', frame: 'title', arrow: 'label', link: 'title', image: 'alt', file: 'name', widget: 'title' };
+const TEXT_PROP = { task: 'text', note: 'text', text: 'text', shape: 'text', frame: 'title', arrow: 'label', link: 'title', image: 'alt', file: 'name', widget: 'title' };
 
 function nodeSize(label, detail) {
   const text = detail ? `${label}\n${detail}` : label;
@@ -467,6 +467,61 @@ def('group_into_section',
   });
 
 // ---- changing
+
+def('add_tasks', 'Add actionable task cards to the current board. Do not invent due dates.',
+  O({ tasks: A(O({ text: S('Task title, up to 500 characters'), detail: S('Optional detail'), status: S('Status', { enum: ['todo', 'doing', 'done'] }), priority: S('Priority', { enum: ['low', 'normal', 'high'] }), due: S('Optional YYYY-MM-DD due date') }, ['text']), 'Tasks to add, up to 30') }, ['tasks']),
+  (a, ctx) => {
+    const boxes = ctx.obstacles();
+    const tasks = reqArr(a.tasks, 'tasks', 1, 30).map((raw) => {
+      const spot = findFreeSpot(boxes, 300, 148, ctx.anchor());
+      const obj = { id: nid('tk_'), type: 'task', text: reqStr(raw.text, 'text', 500), detail: raw.detail ?? '', status: raw.status ?? 'todo', priority: raw.priority ?? 'normal', due: raw.due ?? '', x: spot.x, y: spot.y, w: 300, h: 148, origin: 'ai', t: Date.now() };
+      boxes.push(obj);
+      return obj;
+    });
+    ctx.apply(tasks.map((obj) => ({ op: 'put', obj })), 'Added tasks');
+    return { ok: true, tasks };
+  });
+
+def('update_task', 'Change the status, priority, due date or details of an existing task. Use edit_object to replace its title.',
+  O({ id: S('Task id'), status: S('Status', { enum: ['todo', 'doing', 'done'] }), priority: S('Priority', { enum: ['low', 'normal', 'high'] }), due: S('YYYY-MM-DD or empty to clear'), detail: S('Task detail') }, ['id']),
+  (a, ctx) => {
+    const task = ctx.must(a.id);
+    if (task.type !== 'task') throw new ToolError('This object is not a task');
+    const set = Object.fromEntries(['status', 'priority', 'due', 'detail'].filter((k) => a[k] !== undefined).map((k) => [k, a[k]]));
+    if (!Object.keys(set).length) throw new ToolError('Give at least one task field to change');
+    const apply = () => {
+      ctx.apply([{ op: 'patch', id: a.id, set }], 'Updated task');
+      return { ok: true, task: ctx.must(a.id) };
+    };
+    if (a.detail !== undefined && task.origin !== 'ai' && task.detail?.length > 120 && task.detail !== a.detail) {
+      const p = ctx.pending.create({ boardId: ctx.boardId, turnId: ctx.turnId, summary: 'Replace the details of your task', run: apply });
+      return { ok: false, status: 'needs_confirmation', pendingId: p.id, message: 'Ask before replacing the user’s task details.' };
+    }
+    return apply();
+  });
+
+def('update_project_memory', 'Save a project goal, decisions, open questions or next steps when the user asks you to remember them. Append preserves text. Replacing non-empty fields asks for confirmation. Memory is separate from canvas undo.',
+  O({ revision: N('Current project memory revision from read_board'), mode: S('append (default) or replace', { enum: ['append', 'replace'] }),
+    goal: S('Project goal'), decisions: S('Decisions'), questions: S('Open questions'), nextSteps: S('Next steps') }, ['revision']),
+  (a, ctx) => {
+    const board = ctx.board();
+    const patch = {};
+    for (const key of ['goal', 'decisions', 'questions', 'nextSteps']) {
+      if (a[key] === undefined) continue;
+      if (typeof a[key] !== 'string' || a[key].length > 4000) throw new ToolError(`${key} must be text of at most 4000 characters`);
+      patch[key] = a.mode !== 'replace' && board.memory[key] ? `${board.memory[key]}\n${a[key]}` : a[key];
+    }
+    if (!Object.keys(patch).length) throw new ToolError('Give at least one memory field');
+    const save = () => {
+      const b = ctx.store.setProjectMemory(ctx.boardId, patch, { expectedRevision: a.revision, actor: 'ai' });
+      return { ok: true, memory: b.memory, revision: b.memoryRevision };
+    };
+    if (a.mode === 'replace' && Object.keys(patch).some((k) => board.memory[k] && patch[k] !== board.memory[k])) {
+      const p = ctx.pending.create({ boardId: ctx.boardId, turnId: ctx.turnId, summary: 'Replace saved project memory', run: save });
+      return { ok: false, status: 'needs_confirmation', pendingId: p.id, message: 'Ask the user before replacing saved project memory.' };
+    }
+    return save();
+  });
 
 def('edit_object',
   'Change the text, color, tag or size of one existing object. Mode "append" adds to the existing text instead of replacing it. Replacing a long note the user wrote asks for confirmation.',
@@ -921,10 +976,10 @@ def('switch_board', 'Open a different board on the TV (and make it the board you
     return { ok: true, boardId: b.id, name: b.name };
   });
 
-def('create_board', 'Create a new blank project board (space) and open it on the TV.',
-  O({ name: S('Board name') }, ['name']),
+def('create_board', 'Create a project board, optionally from an editable template, and open it on the TV.',
+  O({ name: S('Board name'), template: S('Board layout', { enum: ['blank', 'project', 'brainstorm', 'decision', 'weekly', 'research'] }) }, ['name']),
   (a, ctx) => {
-    const b = ctx.store.createBoard({ name: reqStr(a.name, 'name', 80), kind: 'space' });
+    const b = ctx.store.createBoard({ name: reqStr(a.name, 'name', 80), kind: 'space', template: a.template ?? 'blank' });
     ctx.hub?.setDisplay({ boardId: b.id });
     ctx.switchedTo = b.id;
     return { ok: true, boardId: b.id, name: b.name };
@@ -954,4 +1009,5 @@ export const MUTATING = new Set([
   'add_notes', 'create_diagram', 'connect_objects', 'create_section', 'group_into_section', 'edit_object', 'move_objects',
   'resize_object', 'organize_objects', 'delete_objects', 'undo_ai_change', 'redo_ai_change', 'restore_version', 'resolve_pending',
   'create_widget', 'add_widget', 'update_widget',
+  'add_tasks', 'update_task', 'update_project_memory',
 ]);

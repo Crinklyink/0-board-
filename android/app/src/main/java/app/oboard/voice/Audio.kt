@@ -12,6 +12,7 @@ import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import android.os.Process
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -184,22 +185,28 @@ class AudioRoute(ctx: Context) {
     private var active = false
 
     fun headsetConnected(): Boolean = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-        it.type in setOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLE_HEADSET)
+        it.type in setOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_USB_HEADSET)
+            || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
     }
 
+    @Suppress("DEPRECATION")
     fun enterConversation() {
         if (active) return
         active = true
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         if (!headsetConnected()) {
-            am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }?.let { am.setCommunicationDevice(it) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }?.let { am.setCommunicationDevice(it) }
+            } else am.isSpeakerphoneOn = true
         }
     }
 
+    @Suppress("DEPRECATION")
     fun exitConversation() {
         if (!active) return
         active = false
-        runCatching { am.clearCommunicationDevice() }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching { am.clearCommunicationDevice() }
+        else am.isSpeakerphoneOn = false
         am.mode = AudioManager.MODE_NORMAL
     }
 }

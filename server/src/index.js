@@ -16,6 +16,7 @@ import { Backups } from './backup.js';
 import { Secrets } from './secrets.js';
 import { Widgets } from './widgets.js';
 import { createApp } from './http.js';
+import { Setup } from './setup.js';
 import { log } from './util.js';
 
 /** Build the whole server. Exported so tests can start isolated instances on random ports with a temp data dir. */
@@ -32,13 +33,14 @@ export async function createServer(overrides = {}) {
   const auth = new Auth(db, cfg.dataDir);
   const displayToken = auth.ensureDisplayToken();
   const assets = new Assets(db, cfg.dataDir);
+  const setup = new Setup(cfg);
   const settings = new Settings(db, cfg);
   const gemini = new Gemini(cfg);
   const hub = new Hub({ store, auth, config: cfg });
   const pending = new Pending(hub);
   const secrets = new Secrets(cfg.dataDir);
   const widgets = new Widgets({ secrets, config: cfg });
-  const deps = { store, auth, hub, assets, settings, gemini, pending, secrets, widgets, config: cfg };
+  const deps = { store, auth, hub, assets, settings, gemini, pending, secrets, widgets, setup, config: cfg };
   const backups = new Backups({ db, dataDir: cfg.dataDir, config: cfg });
   const agent = new Agent({ ...deps });
   const live = new LiveService({ ...deps });
@@ -50,7 +52,7 @@ export async function createServer(overrides = {}) {
   hub.attach(server);
 
   const api = {
-    cfg, db, store, auth, hub, assets, settings, gemini, pending, secrets, widgets, agent, live, backups, server, displayToken,
+    cfg, db, store, auth, hub, assets, settings, gemini, pending, secrets, widgets, setup, agent, live, backups, server, displayToken,
     async listen() {
       await new Promise((resolve, reject) => {
         server.once('error', reject);

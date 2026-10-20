@@ -1,6 +1,8 @@
 # secrets and local state
 .env
 *.env.local
+server-credentials.json
+server-credentials.json.tmp
 server/data/
 # root only: a bare "data/" would also hide the Android source package app/oboard/data/
 /data/

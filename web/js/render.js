@@ -137,6 +137,7 @@ export class Renderer {
       ctx.globalAlpha = dim ? 0.2 : 1;
       if (o.type === 'arrow' && o.label) labels.push([o, dim]);
       switch (o.type) {
+        case 'task': this.#task(o, b, z); break;
         case 'note': this.#note(o, b, z); break;
         case 'text': this.#text(o, b, z); break;
         case 'shape': this.#shape(o, b, z); break;
@@ -177,6 +178,44 @@ export class Renderer {
     const { ctx } = this;
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
+  }
+
+  #task(o, b, z) {
+    const { ctx } = this;
+    const c = colorOf(o.color);
+    this.#rr(b.x, b.y, b.w, b.h, 9);
+    ctx.fillStyle = c.fill; ctx.fill();
+    ctx.strokeStyle = o.status === 'done' ? '#3F7F5C' : c.stroke;
+    ctx.lineWidth = Math.max(1, 1 / z); ctx.stroke();
+    this.#rr(b.x + 14, b.y + 16, 22, 22, 5);
+    ctx.fillStyle = o.status === 'done' ? '#3F7F5C' : THEME.bg2; ctx.fill();
+    ctx.strokeStyle = o.status === 'doing' ? '#D9BE62' : c.ink; ctx.stroke();
+    if (o.status === 'done') {
+      ctx.beginPath(); ctx.moveTo(b.x + 19, b.y + 27); ctx.lineTo(b.x + 24, b.y + 32); ctx.lineTo(b.x + 32, b.y + 22);
+      ctx.strokeStyle = THEME.text; ctx.lineWidth = 2; ctx.stroke();
+    }
+    if (z * 15 < 3) return;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(b.x + 8, b.y + 8, b.w - 16, b.h - 16); ctx.clip();
+    const lines = wrapLines(o.text || 'Untitled task', fontString(16, 600), Math.max(20, b.w - 66));
+    this.#lines(lines.slice(0, 2), fontString(16, 600), 16, 22, b.x + 48, b.y + 16, o.status === 'done' ? THEME.text2 : THEME.text, z, b.w - 66);
+    if (o.detail && b.h > 140) {
+      ctx.font = fontString(12); ctx.fillStyle = THEME.text2; ctx.textBaseline = 'top';
+      ctx.fillText(ellipsize(o.detail.replace(/\s+/g, ' '), ctx.font, Math.max(12, b.w - 28)), b.x + 14, b.y + 76);
+    }
+    ctx.font = fontString(11, 600); ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = o.status === 'done' ? '#74C69A' : o.status === 'doing' ? '#D9BE62' : THEME.text2;
+    const label = o.status === 'done' ? 'DONE' : o.status === 'doing' ? 'IN PROGRESS' : 'TO DO';
+    const priority = o.priority === 'high' ? ' · HIGH' : o.priority === 'low' ? ' · LOW' : '';
+    ctx.fillText(label + priority, b.x + 14, b.y + b.h - 18);
+    if (o.due) {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const late = o.due < today && o.status !== 'done';
+      ctx.fillStyle = late ? '#E58583' : THEME.text2;
+      ctx.textAlign = 'right'; ctx.fillText(`${late ? 'Overdue ' : 'Due '}${o.due}`, b.x + b.w - 14, b.y + b.h - 18);
+    }
+    ctx.restore();
   }
 
   #note(o, b, z) {
@@ -304,8 +343,8 @@ export class Renderer {
     ctx.stroke();
     ctx.globalAlpha /= 0.75;
     if (!o.title || this.editingId === o.id) return;
-    // titles stay readable when zoomed out, but never outgrow their frame
-    const px = Math.min(Math.max(13, 12.5 / z), b.h / 5, 90);
+    // Cap the world-space header size so zooming out does not grow it over the first card.
+    const px = Math.min(Math.max(13, 12.5 / z), b.h / 5, 28);
     ctx.font = fontString(px, 600);
     ctx.fillStyle = c.ink;
     ctx.textBaseline = 'alphabetic';

@@ -7,6 +7,8 @@ import { GeminiError } from './gemini.js';
 import { capture } from './capture.js';
 import { captionAsset } from './ai/caption.js';
 import { runTool, ToolContext } from './ai/tools.js';
+import { BOARD_TEMPLATES } from '../../web/shared/board-templates.js';
+import { transaction } from './db.js';
 
 const PROTOCOL = 1;
 
@@ -23,7 +25,7 @@ const MIME = {
 };
 
 export function createApp(deps) {
-  const { store, auth, hub, assets, agent, live, settings, gemini, backups, pending, secrets, widgets, config } = deps;
+  const { store, auth, hub, assets, agent, live, settings, gemini, backups, pending, secrets, widgets, setup, config } = deps;
   const routes = [];
   const route = (method, pattern, opts, handler) => {
     if (typeof opts === 'function') { handler = opts; opts = {}; }
@@ -71,6 +73,22 @@ export function createApp(deps) {
 
   // ---- boards ---------------------------------------------------------------------------------
 
+  route('GET', '/api/board-templates', (ctx) => ctx.json({ templates: BOARD_TEMPLATES }));
+
+  route('GET', '/api/diagnostics', (ctx) => {
+    if (ctx.device.role === 'display') throw new HttpError(403, 'Open diagnostics on a paired phone or browser');
+    ctx.json(setup.report(deps));
+  });
+  route('PUT', '/api/setup/gemini-key', async (ctx) => {
+    if (ctx.device.role === 'display') throw new HttpError(403, 'Only a paired phone or browser can configure the assistant');
+    setup.saveGeminiKey((await ctx.body()).key);
+    ctx.json({ ok: true, configured: gemini.configured });
+  });
+  route('POST', '/api/diagnostics/gemini', async (ctx) => {
+    if (ctx.device.role === 'display') throw new HttpError(403, 'Open diagnostics on a paired phone or browser');
+    ctx.json(await setup.testGemini(gemini, settings));
+  });
+
   route('GET', '/api/boards', (ctx) => {
     const boards = store.listBoards({ includeArchived: ctx.query.get('archived') === '1' });
     // ?preview=1 adds a small layout sketch per board (the phone draws thumbnails from it).
@@ -80,7 +98,18 @@ export function createApp(deps) {
 
   route('POST', '/api/boards', async (ctx) => {
     const b = await ctx.body();
-    ctx.json({ board: store.createBoard({ name: b.name, kind: 'space' }) }, 201);
+    ctx.json({ board: store.createBoard({ name: b.name, kind: 'space', template: b.template ?? 'blank' }) }, 201);
+  });
+
+  route('GET', '/api/boards/:id/memory', (ctx) => {
+    const b = store.mustBoard(ctx.params.id);
+    ctx.json({ memory: b.memory, revision: b.memoryRevision });
+  });
+  route('PUT', '/api/boards/:id/memory', async (ctx) => {
+    if (ctx.device.role === 'display') throw new HttpError(403, 'Edit project memory on a paired phone or browser');
+    const body = await ctx.body();
+    const b = store.setProjectMemory(ctx.params.id, body.memory, { expectedRevision: body.revision });
+    ctx.json({ memory: b.memory, revision: b.memoryRevision });
   });
 
   route('PATCH', '/api/boards/:id', async (ctx) => {
@@ -138,7 +167,7 @@ export function createApp(deps) {
       const f = assets.read(id);
       if (f) files.push({ id, mime: f.asset.mime, filename: f.asset.filename, caption: f.asset.caption, data: f.data.toString('base64') });
     }
-    const body = JSON.stringify({ format: 'oboard-board', version: 1, exportedAt: now(), board: { name: board.name, kind: board.kind }, objects, assets: files });
+    const body = JSON.stringify({ format: 'oboard-board', version: 1, exportedAt: now(), board: { name: board.name, kind: board.kind, memory: board.memory }, objects, assets: files });
     ctx.raw(200, 'application/json', Buffer.from(body), {
       'content-disposition': `attachment; filename="${board.name.replace(/[^\w.-]+/g, '_') || 'board'}.oboard.json"`,
     });
@@ -153,10 +182,17 @@ export function createApp(deps) {
       if (f.caption && !saved.caption) assets.setCaption(saved.id, f.caption);
       idMap.set(f.id, saved.id);
     }
-    const board = store.createBoard({ name: `${b.board?.name || 'Imported'} (imported)`, kind: 'space' });
     const ops = b.objects.map((o) => ({ op: 'put', obj: o.asset && idMap.has(o.asset) ? { ...o, asset: idMap.get(o.asset) } : o }))
       .sort((x, y) => (x.obj.type === 'arrow') - (y.obj.type === 'arrow'));
-    if (ops.length) store.applyBatch(board.id, ops, { actor: `device:${ctx.device.id}`, label: 'Import' });
+    let board;
+    transaction(store.db, () => {
+      board = store.createBoard({ name: `${b.board?.name || 'Imported'} (imported)`, kind: 'space' });
+      if (ops.length) store.applyBatch(board.id, ops, { actor: `device:${ctx.device.id}`, label: 'Import' });
+      if (b.board?.memory) {
+        const memory = Object.fromEntries(['goal', 'decisions', 'questions', 'nextSteps'].filter((k) => b.board.memory[k] !== undefined).map((k) => [k, b.board.memory[k]]));
+        store.setProjectMemory(board.id, memory, { expectedRevision: 0 });
+      }
+    });
     ctx.json({ board: store.getBoard(board.id) }, 201);
   });
 
@@ -234,7 +270,9 @@ export function createApp(deps) {
 
   route('GET', '/api/settings', (ctx) => ctx.json({ settings: settings.get(), gemini: gemini.configured, tz: config.tz }));
   route('PUT', '/api/settings', async (ctx) => {
-    ctx.json({ settings: settings.set(await ctx.body()) });
+    const next = settings.set(await ctx.body());
+    setup.invalidateTests();
+    ctx.json({ settings: next });
   });
 
   // ---- Gemini Live ----------------------------------------------------------------------------

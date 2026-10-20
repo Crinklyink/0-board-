@@ -9,6 +9,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { TvController } from './tv.js';
 import { RemoteController } from './remote.js';
+import { openMemory, openTask, openTasks } from './productivity.js';
 import { WidgetLayer } from './widgets.js';
 
 const cfg = loadConfig();
@@ -41,6 +42,9 @@ function start() {
   renderer.widgetLive = (id) => widgets.isLive(id);
   renderer.onFrame = () => widgets.sync();
   const ui = new UI({ root, session, editor, cfg, api, widgets });
+  // Native controls sit above the WebView; keep them clear of HTML dialogs and their save buttons.
+  new MutationObserver(() => post('overlay', { open: !ui.overlay.hidden }))
+    .observe(ui.overlay, { attributes: true, attributeFilter: ['hidden'] });
   const input = new Input({ canvas, session, ui });
   ui.input = input;
   session.input = input;
@@ -109,6 +113,10 @@ function start() {
     addNote: (text) => ui.captureText(text),
     pickFile: () => ui.pickFile(),
     openSearch: () => ui.openSearch(),
+    openMemory: () => openMemory(ui),
+    addTask: () => openTask(ui),
+    openTasks: () => openTasks(ui),
+    closeOverlay: () => ui.closeOverlay(),
     openAsk: () => ui.openAsk(),
     insetsChanged: (top, bottom) => { root.style.setProperty('--inset-top', `${top}px`); root.style.setProperty('--inset-bottom', `${bottom}px`); },
   };

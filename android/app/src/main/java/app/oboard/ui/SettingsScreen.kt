@@ -64,6 +64,7 @@ fun SettingsScreen(vm: AppViewModel, page: SettingsPage, onPage: (SettingsPage) 
         SettingsPage.Main -> "Settings"; SettingsPage.Connection -> "Connection"; SettingsPage.Voice -> "Voice"
         SettingsPage.Models -> "Voice models"; SettingsPage.Assistant -> "Assistant"; SettingsPage.Backup -> "Backup & export"
         SettingsPage.ApiKeys -> "API keys"
+        SettingsPage.Diagnostics -> "Setup & diagnostics"
         SettingsPage.About -> "About"
     }
     Column(Modifier.fillMaxSize().background(O.Bg).windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
@@ -76,6 +77,7 @@ fun SettingsScreen(vm: AppViewModel, page: SettingsPage, onPage: (SettingsPage) 
             Column(Modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp)) {
                 when (page) {
                     SettingsPage.Main -> MainPage(vm, onPage)
+                    SettingsPage.Diagnostics -> DiagnosticsPage(vm, onPage)
                     SettingsPage.Connection -> ConnectionPage(vm)
                     SettingsPage.Voice -> VoicePage(vm, onPage)
                     SettingsPage.Models -> ModelsPage(vm)
@@ -94,6 +96,7 @@ private fun MainPage(vm: AppViewModel, onPage: (SettingsPage) -> Unit) {
     val s by vm.settings.collectAsState()
     val link by vm.link.collectAsState()
     Spacer(Modifier.height(8.dp))
+    RowItem("Setup & diagnostics", subtitle = "Check the Pi, TV, assistant and phone voice", icon = OIcons.Check, onClick = { onPage(SettingsPage.Diagnostics) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
     RowItem("Connection", subtitle = "${s.serverUrl.removePrefix("http://")} · ${if (link == Link.Online) "connected" else "offline"}", icon = OIcons.Tv, onClick = { onPage(SettingsPage.Connection) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
     val engine = TtsEngine.of(s.ttsEngine)
     val voiceName = Voices.forEngine(engine).find { it.sid == s.voiceId }?.label ?: ""
@@ -328,7 +331,7 @@ private fun AssistantPage(vm: AppViewModel) {
     var extra by remember(a.extraInstructions) { mutableStateOf(a.extraInstructions) }
     if (ok == false) {
         OCard(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Text("The Pi has no Gemini API key yet. Add GEMINI_API_KEY to /etc/oboard/oboard.env on the Pi and restart it (sudo systemctl restart oboard). The key never comes to this phone.", style = MaterialTheme.typography.bodySmall, color = O.Warn)
+            Text("The Pi has no Gemini API key yet. Open Settings → Setup & diagnostics to add it from this phone. It is saved only on the Pi.", style = MaterialTheme.typography.bodySmall, color = O.Warn)
         }
     }
     SectionLabel("Text and vision model")

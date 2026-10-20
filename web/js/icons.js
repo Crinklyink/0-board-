@@ -2,6 +2,9 @@
 const svg = (body, extra = '') => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${body}</svg>`;
 
 export const ICON = {
+  list: svg('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>'),
+  task: svg('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/>'),
+  memory: svg('<path d="M5 4h14v16H5zM9 8h6M9 12h6M9 16h3"/>'),
   select: svg('<path d="M6 3.5l12 7.2-5.3 1.5-2.2 5.3z"/>'),
   hand: svg('<path d="M12 3v18M3 12h18M12 3l-2.6 2.6M12 3l2.6 2.6M12 21l-2.6-2.6M12 21l2.6-2.6M3 12l2.6-2.6M3 12l2.6 2.6M21 12l-2.6-2.6M21 12l-2.6 2.6"/>'),
   note: svg('<path d="M5 4.5h14v10.5l-5 5H5z"/><path d="M14 20v-5h5"/>'),

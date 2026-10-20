@@ -2,12 +2,13 @@ import { EventEmitter } from 'node:events';
 import zlib from 'node:zlib';
 import { transaction } from './db.js';
 import { rid, now, safeJson } from './util.js';
+import { buildBoardTemplate } from '../../web/shared/board-templates.js';
 import {
   normalizeObject, normalizePatch, applyPatch, diffPatch, objectText, withEstimatedHeight, SchemaError, COLORS,
 } from '../../web/shared/schema.js';
 
 // Order matters: the phone decodes kinds by index (BoardThumb in the Android app).
-export const PREVIEW_KINDS = ['note', 'text', 'shape', 'frame', 'image', 'widget', 'link', 'file', 'draw'];
+export const PREVIEW_KINDS = ['note', 'text', 'shape', 'frame', 'image', 'widget', 'link', 'file', 'draw', 'task'];
 
 export class StoreError extends Error {
   constructor(code, message, extra = {}) {
@@ -123,13 +124,19 @@ export class Store {
     return all.find((b) => b.name.toLowerCase() === n) || all.find((b) => b.name.toLowerCase().includes(n)) || null;
   }
 
-  createBoard({ name, kind = 'space', id }) {
+  createBoard({ name, kind = 'space', id, template = 'blank' }) {
     name = String(name || '').trim().slice(0, 80);
     if (!name) throw new StoreError('invalid', 'Board needs a name');
     if (kind !== 'space') throw new StoreError('invalid', 'Only spaces can be created; Thoughts is built in');
     const t = now();
     const bid = id || rid('bd_', 10);
-    this.db.prepare('INSERT INTO boards(id, name, kind, created_at, updated_at) VALUES (?,?,?,?,?)').run(bid, name, kind, t, t);
+    let objects;
+    try { objects = buildBoardTemplate(template, (prefix) => rid(prefix, 9), t); }
+    catch (e) { throw new StoreError('invalid', e.message); }
+    transaction(this.db, () => {
+      this.db.prepare('INSERT INTO boards(id, name, kind, created_at, updated_at) VALUES (?,?,?,?,?)').run(bid, name, kind, t, t);
+      if (objects.length) this.applyBatch(bid, objects.map((obj) => ({ op: 'put', obj })), { actor: 'system', label: 'Board template' });
+    });
     this.events.emit('boards');
     return this.getBoard(bid);
   }
@@ -152,6 +159,25 @@ export class Store {
     if (!sets.length) return b;
     sets.push('updated_at = ?'); args.push(now());
     this.db.prepare(`UPDATE boards SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
+    this.events.emit('boards');
+    return this.getBoard(id);
+  }
+
+  setProjectMemory(id, patch, { expectedRevision, actor = 'user' } = {}) {
+    const board = this.mustBoard(id);
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new StoreError('invalid', 'Memory revision is required');
+    if (expectedRevision !== board.memoryRevision) throw new StoreError('conflict', 'Project memory changed on another device. Reload it before saving.');
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new StoreError('invalid', 'Memory must be an object');
+    const memory = { ...board.memory };
+    for (const [key, value] of Object.entries(patch)) {
+      if (!['goal', 'decisions', 'questions', 'nextSteps'].includes(key)) throw new StoreError('invalid', `Unknown memory field: ${key}`);
+      if (typeof value !== 'string' || value.length > 4000) throw new StoreError('invalid', `${key} must be text of at most 4000 characters`);
+      memory[key] = value.trim();
+    }
+    memory.updatedAt = now();
+    memory.updatedBy = actor === 'ai' ? 'ai' : 'user';
+    this.db.prepare('UPDATE boards SET memory = ?, memory_rev = memory_rev + 1, updated_at = ? WHERE id = ?')
+      .run(JSON.stringify(memory), memory.updatedAt, id);
     this.events.emit('boards');
     return this.getBoard(id);
   }
@@ -504,7 +530,7 @@ export class Store {
   activityBetween(fromTs, toTs, { boardId, limit = 60 } = {}) {
     const notes = this.db.prepare(`
       SELECT o.board_id, o.data, b.name AS board_name FROM objects o JOIN boards b ON b.id = o.board_id
-      WHERE json_extract(o.data,'$.t') BETWEEN ? AND ? AND o.type IN ('note','text','shape','frame','link')
+      WHERE json_extract(o.data,'$.t') BETWEEN ? AND ? AND o.type IN ('note','text','shape','frame','link','task')
       ${boardId ? 'AND o.board_id = ?' : ''} AND json_extract(o.data,'$.origin') IS NOT 'ai'
       ORDER BY json_extract(o.data,'$.t') LIMIT ?`).all(...(boardId ? [fromTs, toTs, boardId, limit] : [fromTs, toTs, limit]));
     const msgs = this.db.prepare(`
@@ -533,6 +559,7 @@ function boardRow(r) {
     id: r.id, name: r.name, kind: r.kind, pinned: !!r.pinned, archived: !!r.archived, rev: r.rev,
     camera: r.camera ? safeJson(r.camera) : null, createdAt: r.created_at, updatedAt: r.updated_at, openedAt: r.opened_at,
     count: r.count ?? 0,
+    memory: safeJson(r.memory, {}), memoryRevision: r.memory_rev || 0,
   };
 }
 

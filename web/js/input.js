@@ -160,6 +160,12 @@ export class Input {
     const hit = this.model.hit(w.x, w.y, this.#tol(e));
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     if (hit) {
+      if (hit.type === 'task' && !hit.locked && !this.remote && !additive
+        && w.x >= hit.x + 6 && w.x <= hit.x + 44 && w.y >= hit.y + 6 && w.y <= hit.y + 46) {
+        this.s.setSelection([hit.id]);
+        this.g = { type: 'task-toggle', id: hit.id, sp: p };
+        return;
+      }
       const was = this.s.selection.has(hit.id);
       if (additive) {
         const next = new Set(this.s.selection);
@@ -490,6 +496,13 @@ export class Input {
       case 'create': this.#finishCreate(g, w); break;
       case 'arrow': this.#finishArrow(g); break;
       case 'pen': this.#finishPen(g); break;
+      case 'task-toggle': {
+        if (!cancelled && Math.hypot(p.x - g.sp.x, p.y - g.sp.y) < 12) {
+          const task = this.model.get(g.id);
+          if (task && !task.locked) this.s.commit([{ op: 'patch', id: task.id, set: { status: task.status === 'done' ? 'todo' : 'done' } }], { label: 'Task status' });
+        }
+        break;
+      }
       case 'tap': break;
       default: break;
     }

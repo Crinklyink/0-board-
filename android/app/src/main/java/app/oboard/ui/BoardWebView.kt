@@ -49,6 +49,10 @@ class WebController {
     fun setOverview(on: Boolean) = js("oboard.setOverview($on)")
     fun pickFile() = js("oboard.pickFile()")
     fun search() = js("oboard.openSearch()")
+    fun memory() = js("oboard.openMemory()")
+    fun addTask() = js("oboard.addTask()")
+    fun tasks() = js("oboard.openTasks()")
+    fun closeOverlay() = js("oboard.closeOverlay()")
     fun insets(top: Int, bottom: Int) = js("oboard.insetsChanged($top,$bottom)")
 }
 

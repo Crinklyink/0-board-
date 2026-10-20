@@ -5,9 +5,12 @@ Tailscale. This page explains what is protected, how, and where the limits are.
 
 ## The Gemini API key
 
-- The key exists in exactly one place: `/etc/oboard/oboard.env` on the Pi.
-  - The file is owned by `root:oboard` with mode `0640`, and the installer writes it with `umask 077`.
-  - Only root and the server process can read it.
+- A key supplied during installation lives in `/etc/oboard/oboard.env`, owned by `root:oboard` with mode `0640`.
+- A key saved in **Setup & diagnostics** lives in `DATA_DIR/server-credentials.json`, written atomically with mode `0600` on Linux. It takes precedence over the environment key, including after restart.
+  - Only root and the server process can read it. An older installer key may still exist in the environment file; changing the key in the app does not rewrite that file.
+  - Only a paired phone or browser can save the key or run diagnostics; the TV display token is refused.
+  - This file is excluded from Git, database backups, full backups, board exports and the widget-key registry. After restoring onto another Pi, enter your Gemini key again.
+  - The input is masked and cleared after a successful save. It is not saved in phone preferences or browser storage.
 - The key is never sent to the phone, the TV or a browser.
   - It is not in the APK, the web files or any API response. `/api/settings` exposes model names, never the key.
   - Requests to Gemini are made by the server.
@@ -22,6 +25,8 @@ Tailscale. This page explains what is protected, how, and where the limits are.
 - For development, `server/.env` can hold a key. It is gitignored. Do not copy it to the Pi; use the installer.
 
 ## Who can use the board: pairing and tokens
+
+Project memory is saved in the board database, included in exports and backups, and sent to Gemini as context for that board. It is editable by paired phones/browsers and readable by paired displays. Memory edits carry a revision to reject stale overwrites. Clearing conversation history or undoing a canvas change does not clear project memory; clear its fields in **Project memory**. AI replacements require user confirmation.
 
 - Every client (phone, browser, TV) holds its own random **256-bit device token**.
   - The server stores only its SHA-256 hash, so a copy of the database does not reveal usable tokens.

@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import app.oboard.data.BoardPreview
 
 // Same order as PREVIEW_KINDS on the server and the board palette in web/js/theme.js.
-private val KINDS = listOf("note", "text", "shape", "frame", "image", "widget", "link", "file", "draw")
+private val KINDS = listOf("note", "text", "shape", "frame", "image", "widget", "link", "file", "draw", "task")
 private val FILL = listOf(0xFF101E30, 0xFF12263D, 0xFF0F2B30, 0xFF112B20, 0xFF2B2511, 0xFF2F1E12, 0xFF2E1718, 0xFF201B35, 0xFF0C1624)
 private val STROKE = listOf(0xFF2A4160, 0xFF3F6E9E, 0xFF34858C, 0xFF3F7F5C, 0xFFA68B3B, 0xFFB46D3B, 0xFFB45150, 0xFF7D61B2, 0xFF3B4B60)
 

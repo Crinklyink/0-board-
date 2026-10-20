@@ -10,13 +10,21 @@ board, and the phone captures, edits and talks.
  │ hold-to-talk, on-device       │  Tailscale  │ boards in SQLite, op log,     │  HTTP   │ full-screen board │
  │ speech (Qwen3-ASR) and voice  │ ──────────▶ │ undo, backups                 │ ──────▶ │ (Chromium kiosk,  │
  │ (Kokoro / Supertonic)         │  HTTP + WS  │ WebSocket live sync           │         │  auto-starts)     │
- │ canvas (same web UI as TV)    │ ◀────────── │ Gemini agent with 31 canvas   │         └──────────────────┘
+ │ canvas (same web UI as TV)    │ ◀────────── │ Gemini agent with 34 canvas   │         └──────────────────┘
  │ remote control for the TV     │             │ tools; the API key lives only │
  └──────────────────────────────┘             │ here                          │ ───▶ Gemini API (internet)
                                               └───────────────────────────────┘
 ```
 
 ## What you get
+
+**New in v0.4:**
+- **Setup & diagnostics:** add your Gemini key from the phone; check the Pi, TV, storage, backups, microphone permission and voice model downloads. Test whether Google accepts the key and lists your selected models.
+- **Task cards:** titles, details, To do / In progress / Done, priorities and optional due dates. Tap the checkbox, edit from the selection menu, or ask the assistant. **Task list** shows progress, search and status/overdue filters. Tasks sync and undo like notes.
+- **Board templates:** blank, project planner, brainstorm, decision comparison, weekly plan and research. Every starter card and section is editable.
+- **Project memory:** a lasting goal, decisions, open questions and next steps per board. Open it from the canvas toolbar or **More → Project memory**. It is included in each assistant turn and in backups and board exports. When devices edit together, independent changes merge and conflicting fields let you choose which version to keep.
+
+![Task list with progress and filters on a project board](docs/task-list-v0.4.png)
 
 - **TV board.** Turn on the TV and your workspace is there. The assistant's changes glide into view as they happen.
 - **Phone app.** Built for the Fold 7: one column on the cover screen, side-by-side panes unfolded.
@@ -58,8 +66,8 @@ board, and the phone captures, edits and talks.
 4. **Away from home** (optional). Install Tailscale on the Pi and the phone. That's all. See
    [pi/README.md](pi/README.md#use-it-away-from-home).
 
-You need a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The installer asks for it and
-stores it only on the Pi.
+You need a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). Enter it during installation,
+or leave it blank and add it after pairing in **Settings → Setup & diagnostics**. The key is stored only on the Pi.
 
 ## What has been verified
 
@@ -67,7 +75,7 @@ This was built and tested without a physical Fold 7, without a Raspberry Pi, and
 honest list is in [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
 
 **Verified:**
-- 58 automated server tests.
+- 73 automated server tests, including v0.3 database migration, task sync/undo, templates, memory conflict recovery and credential isolation.
 - The Android app on an emulator (debug and signed release builds), including the unfolded Fold 7 size.
 - On-device speech recognition and voice, with measured speed.
 - Interrupting speech.
@@ -92,6 +100,7 @@ honest list is in [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
 | [docs/VOICE.md](docs/VOICE.md) | Speech model research, benchmarks and the choices made (incl. Qwen3-TTS) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Where the key lives, pairing, tokens, network exposure |
 | [docs/TEST-REPORT.md](docs/TEST-REPORT.md) | Acceptance tests A–I: what ran, results, what is still unverified |
+| [docs/RELEASE-0.4.0.md](docs/RELEASE-0.4.0.md) | What's new in v0.4, fixes and upgrade instructions |
 
 ## Development
 

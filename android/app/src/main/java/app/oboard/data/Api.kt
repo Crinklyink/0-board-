@@ -106,7 +106,12 @@ class Api(private val http: OkHttpClient) {
         return boards to display
     }
 
-    suspend fun createBoard(name: String): BoardInfo = call("POST", "/api/boards", buildJsonObject { put("name", name) }, BoardInfo.serializer(), "board")
+    suspend fun createBoard(name: String, template: String = "blank"): BoardInfo = call("POST", "/api/boards", buildJsonObject { put("name", name); put("template", template) }, BoardInfo.serializer(), "board")
+
+    suspend fun boardTemplates(): List<BoardTemplate> = call("GET", "/api/board-templates", null, ListSerializer(BoardTemplate.serializer()), "templates")
+    suspend fun diagnostics(): DiagnosticReport = AppJson.decodeFromJsonElement(DiagnosticReport.serializer(), call("GET", "/api/diagnostics"))
+    suspend fun saveGeminiKey(key: String) { call("PUT", "/api/setup/gemini-key", buildJsonObject { put("key", key) }) }
+    suspend fun testGemini(): DiagnosticReport = AppJson.decodeFromJsonElement(DiagnosticReport.serializer(), call("POST", "/api/diagnostics/gemini", JsonObject(emptyMap())))
 
     suspend fun updateBoard(id: String, name: String? = null, pinned: Boolean? = null, archived: Boolean? = null): BoardInfo {
         val body = buildJsonObject { name?.let { put("name", it) }; pinned?.let { put("pinned", it) }; archived?.let { put("archived", it) } }

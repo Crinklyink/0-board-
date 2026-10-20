@@ -5,6 +5,13 @@ export const COLORS = ['default', 'blue', 'teal', 'green', 'yellow', 'orange', '
 export const TAGS = ['', 'idea', 'fact', 'suggestion', 'question'];
 export const SIZES = ['s', 'm', 'l', 'xl'];
 export const SHAPES = ['rect', 'ellipse', 'diamond', 'pill'];
+export const TASK_STATUSES = ['todo', 'doing', 'done'];
+export const TASK_PRIORITIES = ['low', 'normal', 'high'];
+export function validTaskDate(value) {
+  return value === '' || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && Number(value.slice(0, 4)) >= 1900 && Number(value.slice(0, 4)) <= 9999
+    && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value);
+}
 
 export const NOTE_FONT = { s: 13, m: 15, l: 19, xl: 25 };
 export const TEXT_FONT = { s: 16, m: 24, l: 36, xl: 56 };
@@ -83,6 +90,8 @@ const COMMON = {
 };
 
 export const PROPS = {
+  task: { text: str(500), detail: str(5000), status: oneOf(TASK_STATUSES), priority: oneOf(TASK_PRIORITIES),
+    due: (v, k) => { if (!validTaskDate(v)) bad(`${k} must be a real date in YYYY-MM-DD format`); return v; }, color },
   note: { text: str(20000), color, size, tag: oneOf(TAGS), autoH: bool },
   text: { text: str(5000), color, size, align: oneOf(['left', 'center', 'right']) },
   shape: { shape: oneOf(SHAPES), text: str(2000), color, fill: oneOf(['none', 'tint', 'solid']), size },
@@ -102,6 +111,7 @@ export const isBoxType = (t) => t !== 'arrow';
 
 // Keys that can never be removed with a null patch.
 const REQUIRED = {
+  task: ['x', 'y', 'w', 'h', 'text', 'status', 'priority', 'due'],
   note: ['x', 'y', 'w', 'h'],
   text: ['x', 'y', 'w', 'h'],
   shape: ['x', 'y', 'w', 'h', 'shape'],
@@ -116,6 +126,7 @@ const REQUIRED = {
 
 export function defaultsFor(type) {
   switch (type) {
+    case 'task': return { w: 300, h: 148, text: '', detail: '', status: 'todo', priority: 'normal', due: '', color: 'default' };
     case 'note': return { w: NOTE_WIDTH, h: 96, color: 'default', size: 'm', tag: '', autoH: true, text: '' };
     case 'text': return { w: 320, h: 40, color: 'default', size: 'm', align: 'left', text: '' };
     case 'shape': return { w: 180, h: 100, color: 'blue', fill: 'tint', size: 'm', text: '' };
@@ -192,6 +203,7 @@ export function diffPatch(obj, set) {
 
 export function objectText(o) {
   switch (o.type) {
+    case 'task': return `${o.text || ''} ${o.detail || ''} ${o.status || 'todo'} ${o.priority || 'normal'} ${o.due || ''}`.trim();
     case 'note': case 'text': return o.text || '';
     case 'shape': return o.text || '';
     case 'frame': return o.title || '';

@@ -49,7 +49,7 @@ node scripts/package.mjs
 ```
 
 ```bash
-scp dist/oboard-pi-0.3.0.tar.gz <you>@oboard.local:
+scp dist/oboard-pi-0.4.0.tar.gz <you>@oboard.local:
 ```
 
 Or copy the whole project folder (the `server`, `web` and `pi` folders are what matter).
@@ -61,7 +61,7 @@ ssh <you>@oboard.local
 ```
 
 ```bash
-tar -xzf oboard-pi-0.3.0.tar.gz && cd oboard
+tar -xzf oboard-pi-0.4.0.tar.gz && cd oboard
 ```
 
 ## 3. Install
@@ -70,7 +70,7 @@ tar -xzf oboard-pi-0.3.0.tar.gz && cd oboard
 sudo ./pi/install.sh
 ```
 
-When it asks, paste your Gemini key (it is not shown while you type). The installer:
+When it asks, paste your Gemini key (it is not shown while you type), or leave it blank and add it from **Settings → Setup & diagnostics** after pairing the phone. The installer:
 
 - Installs a pinned Node.js 24 (checksum-verified), Chromium, the `cage` kiosk compositor and Avahi.
 - Creates a locked-down system user `oboard`, and copies the app to `/opt/oboard`.

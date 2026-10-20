@@ -44,7 +44,7 @@ import java.io.IOException
 import java.io.OutputStream
 
 enum class Tab { Capture, Boards, Remote }
-enum class SettingsPage { Main, Connection, Voice, Models, Assistant, ApiKeys, Backup, About }
+enum class SettingsPage { Main, Diagnostics, Connection, Voice, Models, Assistant, ApiKeys, Backup, About }
 
 sealed interface Overlay {
     data class Canvas(val boardId: String) : Overlay
@@ -215,6 +215,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (info.app != "oboard") return "That address isn't an O Board server"
             val r = c.api.pair(url, digits, settings.value.deviceName)
             c.prefs.savePairing(url, r.serverId, r.token)
+            overlay.value = Overlay.Settings(SettingsPage.Diagnostics)
             null
         } catch (e: ApiException) {
             e.message
@@ -260,9 +261,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         thoughtsLoading.value = false
     }
 
-    fun createBoard(name: String, open: Boolean = true) = viewModelScope.launch {
+    fun createBoard(name: String, open: Boolean = true, template: String = "blank") = viewModelScope.launch {
         try {
-            val b = c.api.createBoard(name)
+            val b = c.api.createBoard(name, template)
             refreshBoards()
             if (open) openCanvas(b.id)
         } catch (e: Exception) { notice(e.message ?: "Couldn't create the board") }
