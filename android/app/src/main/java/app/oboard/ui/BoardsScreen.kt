@@ -63,6 +63,7 @@ private fun HomeSection(vm: AppViewModel, onOpen: (String) -> Unit, selected: St
     val onTv = boards.find { it.id == display?.boardId }
     val pinned = boards.filter { it.pinned }
     val recent = boards.filter { !it.pinned }.sortedByDescending { maxOf(it.updatedAt, it.openedAt) }.take(8)
+    LaunchedEffect(Unit) { vm.refreshBoards() } // fresh thumbnails each time Home is shown
     LazyColumn(contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 24.dp)) {
         item {
             OCard(Modifier.fillMaxWidth()) {
@@ -75,6 +76,10 @@ private fun HomeSection(vm: AppViewModel, onOpen: (String) -> Unit, selected: St
                     Spacer(Modifier.height(8.dp))
                     Text(onTv?.name ?: "—", style = MaterialTheme.typography.titleLarge, color = O.Text)
                     if (onTv != null) Text("${onTv.count} items", style = MaterialTheme.typography.bodySmall, color = O.Text3)
+                    if (onTv != null) {
+                        Spacer(Modifier.height(12.dp))
+                        BoardThumb(onTv.preview, Modifier.fillMaxWidth().height(132.dp))
+                    }
                     Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OButton("Open", { onTv?.let { onOpen(it.id) } }, enabled = onTv != null, icon = OIcons.Canvas)
@@ -153,6 +158,7 @@ private fun BoardRow(vm: AppViewModel, b: BoardInfo, onOpen: (String) -> Unit, s
             subtitle = "${b.count} items · $updated",
             icon = if (b.isThoughts) OIcons.Bulb else OIcons.Layers,
             onClick = { onOpen(b.id) },
+            leading = { BoardThumb(b.preview, Modifier.size(width = 68.dp, height = 46.dp)) },
             modifier = if (selected) Modifier.padding(0.dp) else Modifier,
         ) {
             if (b.pinned) Icon(OIcons.Pin, "Pinned", Modifier.size(16.dp), tint = O.Text3)

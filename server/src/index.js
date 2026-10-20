@@ -13,6 +13,8 @@ import { Agent } from './ai/agent.js';
 import { LiveService } from './ai/live.js';
 import { Pending } from './ai/pending.js';
 import { Backups } from './backup.js';
+import { Secrets } from './secrets.js';
+import { Widgets } from './widgets.js';
 import { createApp } from './http.js';
 import { log } from './util.js';
 
@@ -34,7 +36,9 @@ export async function createServer(overrides = {}) {
   const gemini = new Gemini(cfg);
   const hub = new Hub({ store, auth, config: cfg });
   const pending = new Pending(hub);
-  const deps = { store, auth, hub, assets, settings, gemini, pending, config: cfg };
+  const secrets = new Secrets(cfg.dataDir);
+  const widgets = new Widgets({ secrets, config: cfg });
+  const deps = { store, auth, hub, assets, settings, gemini, pending, secrets, widgets, config: cfg };
   const backups = new Backups({ db, dataDir: cfg.dataDir, config: cfg });
   const agent = new Agent({ ...deps });
   const live = new LiveService({ ...deps });
@@ -46,7 +50,7 @@ export async function createServer(overrides = {}) {
   hub.attach(server);
 
   const api = {
-    cfg, db, store, auth, hub, assets, settings, gemini, pending, agent, live, backups, server, displayToken,
+    cfg, db, store, auth, hub, assets, settings, gemini, pending, secrets, widgets, agent, live, backups, server, displayToken,
     async listen() {
       await new Promise((resolve, reject) => {
         server.once('error', reject);

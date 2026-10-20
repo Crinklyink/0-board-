@@ -1,0 +1,76 @@
+<!-- Example widget, the kind the assistant writes for "track NVDA". Used by the dev stand-in for Gemini and the tests. -->
+<style>
+  .wrap { height: 100%; display: flex; flex-direction: column; padding: 16px 18px 12px; }
+  .top { display: flex; align-items: baseline; gap: 10px; }
+  .sym { font-weight: 650; font-size: 15px; letter-spacing: 0.02em; }
+  .name { color: var(--muted); font-size: 12px; }
+  .price { font-size: 34px; font-weight: 600; letter-spacing: -0.01em; }
+  .chg { font-size: 14px; font-weight: 550; margin-left: 6px; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  .chart { flex: 1; min-height: 0; margin-top: 8px; position: relative; }
+  .foot { color: var(--faint); font-size: 11px; margin-top: 6px; display: flex; justify-content: space-between; }
+</style>
+<div class="wrap">
+  <div class="top"><span class="sym">NVDA</span><span class="name">NVIDIA · Nasdaq</span></div>
+  <div><span class="price" id="price">—</span><span class="chg" id="chg"></span></div>
+  <div class="chart"><canvas id="c"></canvas></div>
+  <div class="foot"><span id="when">Loading…</span><span>Yahoo Finance · today</span></div>
+</div>
+<script>
+  const fmt = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const time = (s) => new Date(s * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  let chart;
+
+  async function load() {
+    const d = await ob.fetch('https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1d&interval=5m', { cache: 60 });
+    const r = d.chart.result[0];
+    const closes = r.indicators.quote[0].close;
+    const pts = r.timestamp.map((t, i) => [t, closes[i]]).filter((p) => p[1] != null);
+    const price = r.meta.regularMarketPrice;
+    const prev = r.meta.chartPreviousClose;
+    const diff = price - prev;
+    const up = diff >= 0;
+    document.getElementById('price').textContent = `$${fmt(price)}`;
+    const chg = document.getElementById('chg');
+    chg.textContent = `${up ? '+' : '−'}${fmt(Math.abs(diff))} (${up ? '+' : '−'}${Math.abs((diff / prev) * 100).toFixed(2)}%)`;
+    chg.className = `chg ${up ? 'up' : 'down'}`;
+    document.getElementById('when').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+
+    const color = up ? ob.theme.up : ob.theme.down;
+    const labels = pts.map((p) => time(p[0]));
+    const values = pts.map((p) => p[1]);
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.data.datasets[0].borderColor = color;
+      chart.update('none');
+      return;
+    }
+    chart = new Chart(document.getElementById('c'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data: values, borderColor: color, borderWidth: 2, pointRadius: 0, tension: 0.25, fill: true,
+          backgroundColor: (ctx) => {
+            const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height || 200);
+            g.addColorStop(0, `${color}55`);
+            g.addColorStop(1, `${color}00`);
+            return g;
+          },
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: ob.mode !== 'tv', intersect: false, mode: 'index' } },
+        scales: {
+          x: { ticks: { color: ob.theme.muted, maxTicksLimit: 4, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
+          y: { position: 'right', ticks: { color: ob.theme.muted, maxTicksLimit: 4 }, grid: { color: ob.theme.grid }, border: { display: false } },
+        },
+      },
+    });
+  }
+
+  ob.every(60, load);
+</script>

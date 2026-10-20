@@ -19,8 +19,10 @@ The server runs on Node 24 with one npm dependency (`ws`). It uses the built-in 
 | `assets.js` | Uploaded photos and files |
 | `capture.js` | Quick capture into the Thoughts inbox |
 | `backup.js` | Automatic database backups and a streamed full export |
+| `widgets.js` | Data proxy for widgets, and their status reports |
+| `secrets.js` | API keys for widgets (kept outside the database) |
 | `ai/agent.js` | The Gemini turn loop |
-| `ai/tools.js` | The 25 canvas tools |
+| `ai/tools.js` | The 30 canvas tools |
 | `ai/live.js` | Gemini Live ephemeral tokens and tool calls |
 | `ai/pending.js` | Confirmation of destructive changes |
 | `ai/context.js` | Board summary for the prompt |
@@ -107,6 +109,7 @@ survives tool calls.
 | Change | `edit_object`, `move_objects`, `resize_object`, `organize_objects` |
 | Remove and history | `delete_objects`, `undo_ai_change`, `redo_ai_change`, `list_versions`, `restore_version`, `forget_recent` ("don't save that") |
 | TV and boards | `focus_tv`, `switch_board`, `create_board` |
+| Widgets | `create_widget`, `update_widget`, `read_widget_logs`, `list_api_keys`, `request_api_key` |
 | Confirmation | `resolve_pending` |
 
 **Safety rules:**
@@ -123,6 +126,54 @@ survives tool calls.
   as-is and then streams audio with Gemini directly over WebSocket.
 - Tool calls from Live go back through the Pi (`POST /api/live/tool`), so they use the same validated tools and undo
   history.
+
+### Widgets
+
+A widget is a board object (`type: "widget"`) whose `html` is a small app: markup, styles and inline scripts. It also
+has a small saved `state`. It syncs, undoes and backs up like any other object.
+
+**Where it runs.** Each screen showing the widget (TV, phone canvas, browser) loads it in its own iframe:
+- The iframe uses `sandbox="allow-scripts"` without same-origin, so it cannot see the board page, its token or its
+  storage.
+- `web/widget.html` gives it a policy with `connect-src 'none'`: no network at all.
+- `web/widgets.js` lays the frames over the canvas and scales them with the camera.
+- Frames start only near the visible area, at most 12 at once. Off-screen frames pause their refresh loops and stop
+  after a minute.
+
+**The runtime** (`web/js/widget-runtime.js`) gives widget code the `ob` object:
+
+| Call | What it does |
+|---|---|
+| `ob.fetch(url, opts)` | Data, through the Pi |
+| `ob.every(seconds, fn)` | Refresh at least 10 s apart; paused off screen |
+| `ob.state` / `ob.setState()` | Saved data, at most every 5 s |
+| `ob.theme` | The board's colours, also as CSS variables |
+| `ob.onResize()` | Called when the widget is resized |
+
+Chart.js 4 is preloaded (`web/vendor/chart.umd.min.js`, checked against npm's integrity hash).
+
+**Data proxy** (`POST /api/widgets/fetch`):
+- The Pi makes the request and keeps short-lived answers in a cache, so the TV and phone share one upstream request.
+- Refusals:
+  - addresses inside the home network (private, loopback, link-local, CGNAT/Tailscale), checked on every DNS lookup and
+    redirect;
+  - answers over 2 MB;
+  - binary answers;
+  - more than 60 upstream requests a minute per widget.
+- API keys appear in widget code only as `{{NAME}}` placeholders. The Pi fills them in only for the host each key is
+  bound to, only over https, and never in a host name. On a redirect to another host, the key headers are dropped.
+
+**Feedback loop.** Each screen reports `ready` (with the text the widget shows), errors, or a missing key to
+`POST /api/widgets/:id/report`.
+- `create_widget` and `update_widget` move the TV to the widget, then wait up to 9 s for the first report on that exact
+  code version, matched by hash. The model learns in the same turn whether it worked, and fixes errors with
+  `update_widget`.
+- The board summary the model reads shows each widget's latest state.
+
+**Keys** (`secrets.js`) live in `DATA_DIR/secrets.json` (mode `0600`), outside the database.
+- They are never part of backups or exports, never returned by the API, and never in the conversation.
+- `request_api_key` creates an empty entry. The app shows a card where the user pastes the key, which goes straight
+  to `PUT /api/secrets/:name`. Widgets waiting for that key restart on their own.
 
 ## Canvas (`web/`)
 

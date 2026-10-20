@@ -1,0 +1,53 @@
+/* Base look for widgets: the same midnight palette as the board, so AI-made widgets fit in without extra work. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url("../fonts/inter-latin.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+:root {
+  --bg: #0B1626;
+  --surface: #101E30;
+  --surface-hi: #16293F;
+  --border: #203348;
+  --text: #E5EDF5;
+  --muted: #8D9FB4;
+  --faint: #5C6F85;
+  --accent: #5689BA;
+  --up: #4FB286;
+  --down: #D46A68;
+  --grid: rgba(141, 159, 180, 0.12);
+  --font: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--bg); color: var(--text); font: 14px/1.4 var(--font);
+  -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+  user-select: none; -webkit-user-select: none;
+}
+#ob-root { height: 100%; }
+button, input, select { font: inherit; color: inherit; }
+button { background: var(--surface-hi); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+input, select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+canvas { display: block; }
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Messages the runtime shows on the widget's behalf (waiting for a key, errors). */
+.ob-msg {
+  position: fixed; inset: 0; display: grid; place-content: center; gap: 6px; padding: 18px; text-align: center;
+  background: var(--bg); z-index: 2147483000;
+}
+.ob-msg b { font-size: 15px; font-weight: 600; }
+.ob-msg span { color: var(--muted); font-size: 13px; max-width: 34ch; margin: 0 auto; }
+.ob-msg i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin: 0 auto 4px; animation: ob-pulse 1.6s ease-in-out infinite; }
+.ob-msg.err i { background: var(--down); animation: none; }
+.ob-bar {
+  position: fixed; left: 8px; right: 8px; bottom: 8px; padding: 5px 9px; border-radius: 8px; font-size: 11.5px;
+  background: rgba(46, 23, 24, 0.92); color: #F6DEDD; border: 1px solid rgba(180, 81, 80, 0.5); z-index: 2147483000;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@keyframes ob-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .ob-msg i { animation: none; } }

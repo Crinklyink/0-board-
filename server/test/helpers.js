@@ -10,8 +10,8 @@ export function tmpDir(prefix = 'oboard-test-') {
 }
 
 /** Start an isolated server on a random port. Pass dataDir to reuse state across a simulated restart. */
-export async function startServer({ dataDir = tmpDir(), gemini = {}, defaults = {} } = {}) {
-  const app = await createServer({ port: 0, host: '127.0.0.1', dataDir, gemini, defaults, backupEveryHours: 6 });
+export async function startServer({ dataDir = tmpDir(), gemini = {}, defaults = {}, ...extra } = {}) {
+  const app = await createServer({ port: 0, host: '127.0.0.1', dataDir, gemini, defaults, backupEveryHours: 6, ...extra });
   const port = await app.listen();
   const base = `http://127.0.0.1:${port}`;
   const token = app.displayToken;
@@ -62,6 +62,13 @@ export function wsClient(base, token) {
 }
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Pair a phone (or browser) and return its token. */
+export async function pairPhone(s, name = 'Test phone', role = 'phone') {
+  const { json: pc } = await s.call('GET', '/api/pair/new');
+  const r = await s.call('POST', '/api/pair', { code: pc.code, name, role }, { tok: null });
+  return r.json.token;
+}
 
 /** A fake Gemini that speaks just enough of the REST + SSE protocol. Script it per test. */
 export async function startMockGemini() {

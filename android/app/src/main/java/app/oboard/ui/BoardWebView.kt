@@ -132,7 +132,12 @@ fun BoardWebView(
                 addJavascriptInterface(WebBridge(ctx, cfg) { e -> event(e) }, "OBoardHost")
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                        if (request.url.host == "appassets.androidplatform.net") loader.shouldInterceptRequest(request.url) else null
+                        if (request.url.host == "appassets.androidplatform.net") {
+                            loader.shouldInterceptRequest(request.url)?.also { r ->
+                                // Widget frames have an opaque origin; fonts load in CORS mode, so let them use the board's typeface.
+                                if (request.url.path?.endsWith(".woff2") == true) r.responseHeaders = (r.responseHeaders ?: emptyMap()) + ("Access-Control-Allow-Origin" to "*")
+                            }
+                        } else null
 
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         // Never navigate the canvas away; open external links in the browser.

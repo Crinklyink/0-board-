@@ -160,6 +160,12 @@ export class Hub {
 
   // ------------------------------------------------------------- connections
 
+  /** Is any screen that runs widgets (the TV, a phone or browser canvas; not the small remote mirror) showing this board? */
+  watching(boardId) {
+    for (const c of this.clients) if (c.boards.has(boardId) && !/ remote$/.test(c.name)) return true;
+    return false;
+  }
+
   /** A removed device loses its open connections at once, not just on its next reconnect. */
   dropDevice(deviceId) {
     for (const c of this.clients) if (c.device.id === deviceId) c.ws.close(4401, 'Device removed');

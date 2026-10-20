@@ -177,6 +177,7 @@ fun OTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     textStyle: TextStyle = MaterialTheme.typography.bodyLarge,
     framed: Boolean = true,
+    visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
 ) {
     BasicTextField(
         value = value,
@@ -189,6 +190,7 @@ fun OTextField(
         cursorBrush = SolidColor(O.AccentHi),
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
+        visualTransformation = visualTransformation,
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().then(if (framed) Modifier.clip(RoundedCornerShape(12.dp)).background(O.Bg).border(1.dp, O.Border, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp) else Modifier),
@@ -207,6 +209,7 @@ fun RowItem(
     subtitle: String? = null,
     icon: ImageVector? = null,
     onClick: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -218,7 +221,10 @@ fun RowItem(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(12.dp))
+        } else if (icon != null) {
             Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(O.Surface), contentAlignment = Alignment.Center) {
                 Icon(icon, null, Modifier.size(19.dp), tint = O.Text2)
             }

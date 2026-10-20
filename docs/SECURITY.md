@@ -74,12 +74,43 @@ Tailscale. This page explains what is protected, how, and where the limits are.
   - a memory cap.
 - Node.js is pinned to one version, and the download is verified against a SHA-256 before installing.
 
+## Widgets and their API keys
+
+Widgets are code written by the assistant, so they are treated as untrusted:
+
+- **Sealed frame.** Each widget runs in an iframe sandboxed without same-origin. It cannot read the board page, the
+  device token, cookies or storage.
+- **No network.** The frame's policy has `connect-src 'none'`, so `fetch`, `XMLHttpRequest` and `WebSocket` are
+  blocked. It also cannot load outside scripts. Data only comes through `ob.fetch`, which the board page relays to the
+  Pi.
+- **The proxy refuses your home network.** It will not fetch from private, loopback, link-local or CGNAT/Tailscale
+  addresses. This is checked when the name is resolved (and on every redirect), so a widget cannot reach your router,
+  the Pi or other devices.
+- **Keys never enter the widget.** Widget code uses a placeholder like `{{FINNHUB_KEY}}`. The Pi fills it in:
+  - only for the website the key was saved for (e.g. `finnhub.io` and its subdomains);
+  - only over https;
+  - never inside a host name.
+
+  A widget that tries to send the key elsewhere gets an error. On a redirect to another website, key-carrying headers
+  are dropped.
+- **Storage.** Keys are stored in `/var/lib/oboard/secrets.json` (mode `0600`, readable only by the service).
+  - They are not in the database, backups or exports.
+  - They are never returned by the API; the app only sees names and websites.
+  - They never appear in the conversation, so they are not sent to Gemini.
+  - The TV cannot add or remove keys.
+- **Entering keys.** When the assistant needs a key, it asks for one with `request_api_key`. A card appears in the app,
+  and the key goes from that card straight to the Pi. The assistant is instructed never to ask for a key in chat.
+- **Limits.** The proxy enforces a request rate, a 2 MB answer cap and timeouts. Destructive edits by the assistant,
+  including deleting a widget, still need your confirmation, and every change can be undone.
+
+After restoring a backup onto a new Pi, add your widget keys again: they are deliberately not part of backups.
+
 ## Supply chain
 
 | Component | Protection |
 |---|---|
 | Server | One npm dependency (`ws`), with a lockfile |
-| Web UI | No dependencies from a CDN; everything is bundled |
+| Web UI | No dependencies from a CDN; everything is bundled. Chart.js (for widgets) is vendored after checking npm's integrity hash |
 | Android speech library (sherpa-onnx AAR) | Fetched from its official GitHub release and checked against a pinned SHA-256 |
 | Speech models on the phone | Each download is checked against a pinned SHA-256 from the publisher. One small tokenizer file has no published hash and is size-checked |
 

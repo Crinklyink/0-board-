@@ -1,6 +1,8 @@
 package app.oboard.data
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
@@ -53,13 +55,15 @@ class Api(private val http: OkHttpClient) {
         return b.build()
     }
 
-    private suspend fun call(method: String, path: String, body: JsonElement? = null, auth: Boolean = true, base: String = baseUrl, token: String = this.token): JsonObject {
+    // Response bodies are read on the IO dispatcher: the coroutine resumes on the caller's (often the main) thread, and
+    // a body bigger than OkHttp's first buffer would otherwise be read from the socket there.
+    private suspend fun call(method: String, path: String, body: JsonElement? = null, auth: Boolean = true, base: String = baseUrl, token: String = this.token): JsonObject = withContext(Dispatchers.IO) {
         val rb = body?.let { AppJson.encodeToString(JsonElement.serializer(), it).toRequestBody(jsonType) }
         exec(req(base, method, path, rb, auth, token)).use { res ->
             val text = res.body?.string().orEmpty()
             val json = runCatching { AppJson.parseToJsonElement(text) }.getOrNull() as? JsonObject
             if (!res.isSuccessful) throw ApiException(res.code, json?.get("error")?.jsonPrimitive?.contentOrNull ?: "Request failed (${res.code})")
-            return json ?: JsonObject(emptyMap())
+            json ?: JsonObject(emptyMap())
         }
     }
 
@@ -82,10 +86,21 @@ class Api(private val http: OkHttpClient) {
     suspend fun addresses(): List<String> =
         (call("GET", "/api/me")["addresses"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
 
+    // ------------------------------------------------------------------------- widget API keys
+
+    suspend fun apiKeys(): List<ApiKeyInfo> = call("GET", "/api/secrets", null, ListSerializer(ApiKeyInfo.serializer()), "secrets")
+
+    suspend fun saveApiKey(name: String, value: String, host: String? = null, service: String? = null): ApiKeyInfo {
+        val body = buildJsonObject { put("value", value); host?.let { put("host", it) }; service?.let { put("service", it) } }
+        return call("PUT", "/api/secrets/$name", body, ApiKeyInfo.serializer(), "secret")
+    }
+
+    suspend fun deleteApiKey(name: String) { call("DELETE", "/api/secrets/$name") }
+
     // ------------------------------------------------------------------------- boards
 
     suspend fun boards(): Pair<List<BoardInfo>, DisplayState?> {
-        val o = call("GET", "/api/boards")
+        val o = call("GET", "/api/boards?preview=1")
         val boards = AppJson.decodeFromJsonElement(ListSerializer(BoardInfo.serializer()), o["boards"] ?: JsonArray(emptyList()))
         val display = o["display"]?.let { runCatching { AppJson.decodeFromJsonElement(DisplayState.serializer(), it) }.getOrNull() }
         return boards to display
@@ -122,11 +137,13 @@ class Api(private val http: OkHttpClient) {
         val rb = bytes.toRequestBody(mime.toMediaType())
         val r = Request.Builder().url("${baseUrl.trimEnd('/')}/api/assets").header("Authorization", "Bearer $token")
             .header("x-filename", java.net.URLEncoder.encode(filename, "UTF-8").replace("+", "%20")).post(rb).build()
-        exec(r).use { res ->
-            val text = res.body?.string().orEmpty()
-            val json = runCatching { AppJson.parseToJsonElement(text).jsonObject }.getOrNull()
-            if (!res.isSuccessful) throw ApiException(res.code, json?.get("error")?.jsonPrimitive?.contentOrNull ?: "Upload failed (${res.code})")
-            return AppJson.decodeFromJsonElement(AssetInfo.serializer(), json!!["asset"]!!)
+        return withContext(Dispatchers.IO) {
+            exec(r).use { res ->
+                val text = res.body?.string().orEmpty()
+                val json = runCatching { AppJson.parseToJsonElement(text).jsonObject }.getOrNull()
+                if (!res.isSuccessful) throw ApiException(res.code, json?.get("error")?.jsonPrimitive?.contentOrNull ?: "Upload failed (${res.code})")
+                AppJson.decodeFromJsonElement(AssetInfo.serializer(), json!!["asset"]!!)
+            }
         }
     }
 
@@ -206,17 +223,21 @@ class Api(private val http: OkHttpClient) {
     /** Stream the full backup (.tar with database and every uploaded file) into [out]. Returns bytes written. */
     suspend fun downloadFullBackup(out: OutputStream): Long {
         val r = Request.Builder().url("${baseUrl.trimEnd('/')}/api/backup/full").header("Authorization", "Bearer $token").build()
-        exec(r).use { res ->
-            if (!res.isSuccessful) throw ApiException(res.code, "Backup failed (${res.code})")
-            return res.body!!.byteStream().use { it.copyTo(out) }
+        return withContext(Dispatchers.IO) {
+            exec(r).use { res ->
+                if (!res.isSuccessful) throw ApiException(res.code, "Backup failed (${res.code})")
+                res.body!!.byteStream().use { it.copyTo(out) }
+            }
         }
     }
 
     suspend fun exportBoard(id: String): ByteArray {
         val r = Request.Builder().url("${baseUrl.trimEnd('/')}/api/boards/$id/export").header("Authorization", "Bearer $token").build()
-        exec(r).use { res ->
-            if (!res.isSuccessful) throw ApiException(res.code, "Export failed (${res.code})")
-            return res.body!!.bytes()
+        return withContext(Dispatchers.IO) {
+            exec(r).use { res ->
+                if (!res.isSuccessful) throw ApiException(res.code, "Export failed (${res.code})")
+                res.body!!.bytes()
+            }
         }
     }
 }

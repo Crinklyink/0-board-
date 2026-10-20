@@ -9,7 +9,7 @@ const snip = (s, n = SNIP) => {
 };
 
 /** A compact, id-rich description of a board for the model. Not JSON, to keep it cheap and readable. */
-export function boardContext({ store, pending, boardId, selection = [], anchor = null }) {
+export function boardContext({ store, pending, widgets = null, boardId, selection = [], anchor = null }) {
   const board = store.getBoard(boardId);
   if (!board) return 'No board is open.';
   const objs = store.getObjects(boardId);
@@ -46,6 +46,7 @@ export function boardContext({ store, pending, boardId, selection = [], anchor =
     else if (o.type === 'link') body = ` "${snip(o.title, 60)}" ${snip(o.url, 80)}`;
     else if (o.type === 'draw') body = ' (freehand drawing)';
     else if (o.type === 'file') body = ` "${snip(o.name, 60)}"`;
+    else if (o.type === 'widget') body = ` "${snip(o.title, 60)}"${widgetStatus(widgets?.status(o.id))}`;
     else body = ` "${snip(objectText(o))}"`;
     lines.push(`- ${o.id} ${o.type}${tag}${ai}${body} @${r(o.x)},${r(o.y)} ${r(o.w)}x${r(o.h)}`);
   }
@@ -69,6 +70,13 @@ export function boardContext({ store, pending, boardId, selection = [], anchor =
 }
 
 const r = (n) => Math.round(Number(n) || 0);
+
+function widgetStatus(s) {
+  if (!s) return '';
+  if (s.level === 'ready') return ` [running${s.text ? `, shows: ${snip(s.text, 80)}` : ''}]`;
+  if (s.level === 'needs_key') return ` [waiting for API key ${s.message}]`;
+  return ` [ERROR: ${snip(s.message, 120)}]`;
+}
 
 function ago(ts) {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));

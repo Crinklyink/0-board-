@@ -32,6 +32,9 @@ export const ICON = {
   front: svg('<path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5" opacity="0.55"/>'),
   ask: svg('<path d="M4.5 5.5h15v10h-9l-4.5 4v-4h-1.5z"/>'),
   tv: svg('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M9 20h6M12 17v3"/>'),
+  widget: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M7 15.5l3-3.5 2.5 2 4.5-5.5"/>'),
+  refresh: svg('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>'),
+  tap: svg('<path d="M9.5 11V5.8a1.8 1.8 0 0 1 3.6 0V11l3.6.7a2 2 0 0 1 1.6 2.3l-.8 4.4a2.5 2.5 0 0 1-2.5 2.1h-3.4a2.5 2.5 0 0 1-2-1l-3-4a1.6 1.6 0 0 1 2.4-2.1l.5.6"/>'),
   boards: svg('<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>'),
   link: svg('<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>'),
 };

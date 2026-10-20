@@ -3,8 +3,11 @@ import zlib from 'node:zlib';
 import { transaction } from './db.js';
 import { rid, now, safeJson } from './util.js';
 import {
-  normalizeObject, normalizePatch, applyPatch, diffPatch, objectText, withEstimatedHeight, SchemaError,
+  normalizeObject, normalizePatch, applyPatch, diffPatch, objectText, withEstimatedHeight, SchemaError, COLORS,
 } from '../../web/shared/schema.js';
+
+// Order matters: the phone decodes kinds by index (BoardThumb in the Android app).
+export const PREVIEW_KINDS = ['note', 'text', 'shape', 'frame', 'image', 'widget', 'link', 'file', 'draw'];
 
 export class StoreError extends Error {
   constructor(code, message, extra = {}) {
@@ -73,6 +76,33 @@ export class Store {
       FROM boards b ${includeArchived ? '' : 'WHERE b.archived = 0'}
       ORDER BY b.pinned DESC, b.updated_at DESC`).all();
     return rows.map(boardRow);
+  }
+
+  /**
+   * A tiny sketch of a board for thumbnails: up to 80 boxes as [x, y, w, h, kind, color], normalised to the content
+   * bounds (0..1), plus the content's aspect ratio. Cached per board revision.
+   */
+  boardPreview(boardId, rev) {
+    this.previewCache ??= new Map();
+    const hit = this.previewCache.get(boardId);
+    if (hit && hit.rev === rev) return hit.preview;
+    const objs = this.getObjects(boardId).filter((o) => o.type !== 'arrow' && Number.isFinite(o.w));
+    let preview = null;
+    if (objs.length) {
+      let x1 = Infinity; let y1 = Infinity; let x2 = -Infinity; let y2 = -Infinity;
+      for (const o of objs) { x1 = Math.min(x1, o.x); y1 = Math.min(y1, o.y); x2 = Math.max(x2, o.x + o.w); y2 = Math.max(y2, o.y + o.h); }
+      const w = Math.max(1, x2 - x1);
+      const h = Math.max(1, y2 - y1);
+      const r3 = (n) => Math.round(n * 1000) / 1000;
+      const picked = objs.sort((a, b) => (a.type === 'frame') - (b.type === 'frame') || b.w * b.h - a.w * a.h).slice(0, 80)
+        .sort((a, b) => (b.type === 'frame') - (a.type === 'frame') || (a.z || 0) - (b.z || 0));
+      preview = {
+        a: r3(w / h),
+        b: picked.map((o) => [r3((o.x - x1) / w), r3((o.y - y1) / h), r3(o.w / w), r3(o.h / h), PREVIEW_KINDS.indexOf(o.type), Math.max(0, COLORS.indexOf(o.color || 'default'))]),
+      };
+    }
+    this.previewCache.set(boardId, { rev, preview });
+    return preview;
   }
 
   getBoard(id) {

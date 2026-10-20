@@ -146,6 +146,7 @@ export class Renderer {
         case 'image': this.#image(o, b, z); break;
         case 'file': this.#card(o, b, z, o.name || 'File', o.mime || '', 'file'); break;
         case 'link': this.#card(o, b, z, o.title || o.url, hostOf(o.url), 'link'); break;
+        case 'widget': this.#widget(o, b, z); break;
         default: break;
       }
     }
@@ -453,6 +454,40 @@ export class Renderer {
     ctx.fillText(ellipsize(sub, ctx.font, maxW), tx, iy + 15);
   }
 
+  /** A widget's card. The live frame (widgets.js) covers it when big enough; zoomed out, this is what you see. */
+  #widget(o, b, z) {
+    const { ctx } = this;
+    this.#rr(b.x, b.y, b.w, b.h, 10);
+    ctx.fillStyle = '#0B1626';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1 / z, 1);
+    ctx.strokeStyle = THEME.border;
+    ctx.stroke();
+    if (this.widgetLive?.(o.id)) return;
+    // Title stays readable when zoomed out, like section titles.
+    const px = Math.min(Math.max(14, 13 / z), b.h / 4.5, 80);
+    if (px * z < 4) return;
+    ctx.font = fontString(px, 600);
+    ctx.fillStyle = THEME.text;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(ellipsize(o.title || 'Widget', ctx.font, b.w - px * 2.2), b.x + px, b.y + px * 1.75);
+    // A small "live widget" mark (window with a line), never a fake chart: the real content is only in the live frame.
+    const s = px * 0.9;
+    const ix = b.x + px; const iy = b.y + px * 2.55;
+    if (iy + s < b.y + b.h - px * 0.4) {
+      ctx.strokeStyle = THEME.accent;
+      ctx.lineWidth = Math.max(1 / z, px * 0.08);
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.roundRect(ix, iy, s * 1.2, s, s * 0.18);
+      ctx.moveTo(ix + s * 0.22, iy + s * 0.72); ctx.lineTo(ix + s * 0.5, iy + s * 0.45); ctx.lineTo(ix + s * 0.7, iy + s * 0.58); ctx.lineTo(ix + s * 0.98, iy + s * 0.28);
+      ctx.stroke();
+      ctx.font = fontString(px * 0.78, 500);
+      ctx.fillStyle = THEME.text3;
+      ctx.fillText('Live widget', ix + s * 1.6, iy + s * 0.78);
+    }
+  }
+
   #drawDraft(z) {
     const d = this.draft;
     const { ctx } = this;
@@ -531,7 +566,7 @@ export class Renderer {
         this.#outline(model.box(o), lw * 1.2, THEME.accent, 0);
       }
     }
-    if (sel.length === 1 && sel[0].type !== 'arrow' && !sel[0].locked && !this.noHandles) {
+    if (sel.length === 1 && sel[0].type !== 'arrow' && !sel[0].locked && !this.noHandles && this.liveWidget !== sel[0].id) {
       const b = model.box(sel[0]);
       const hs = HANDLE / z;
       for (const h of handlePositions(b)) {

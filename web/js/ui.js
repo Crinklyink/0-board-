@@ -25,11 +25,14 @@ const TOOL_LABEL = {
   edit_object: 'Editing', delete_objects: 'Checking what to delete', search_board: 'Searching the board', read_board: 'Reading the board',
   focus_tv: 'Moving the view', recall: 'Remembering', view_images: 'Looking at images', undo_ai_change: 'Undoing', restore_version: 'Preparing to restore',
   switch_board: 'Switching board', create_board: 'Creating a board',
+  create_widget: 'Building a widget', update_widget: 'Fixing the widget', read_widget_logs: 'Checking the widget',
+  list_api_keys: 'Checking API keys', request_api_key: 'Asking for an API key',
 };
 
 export class UI {
-  constructor({ root, session, editor, cfg, api }) {
+  constructor({ root, session, editor, cfg, api, widgets = null }) {
     this.root = root;
+    this.widgets = widgets;
     this.s = session;
     this.editor = editor;
     this.cfg = cfg;
@@ -234,6 +237,7 @@ export class UI {
     if (!o) return;
     if (o.type === 'link') { this.openLink(o.url); return; }
     if (o.type === 'image' || o.type === 'file') { this.openAsset(o); return; }
+    if (o.type === 'widget') { this.s.setSelection([id]); this.widgets?.setInteractive(id); this.updateContext(); return; }
     if (this.remote) { this.editor.start(id); return; }
     this.editor.start(id);
     void worldPt;
@@ -294,7 +298,7 @@ export class UI {
     this.ctxRaf = requestAnimationFrame(() => { this.ctxRaf = 0; this.updateContext(); });
   }
 
-  onPointerDown() { this.dragging = true; this.ctx.classList.add('dim'); }
+  onPointerDown() { this.dragging = true; this.ctx.classList.add('dim'); if (this.widgets?.interactive) this.widgets.setInteractive(null); }
   onPointerUp() { this.dragging = false; setTimeout(() => { if (!this.dragging) this.ctx.classList.remove('dim'); this.updateContext(); }, 60); }
   onCameraSettled() { this.updateContext(); }
   onEscape() { this.closeOverlay(); this.s.setSelection([]); }
@@ -305,7 +309,7 @@ export class UI {
     const objs = ids.map((id) => this.s.model.get(id)).filter(Boolean);
     if (!objs.length || this.editor.editing) { this.ctx.hidden = true; return; }
     this.ctx.hidden = false;
-    const key = objs.map((o) => `${o.id}:${o.color}:${o.size}:${o.tag}:${o.dash}:${o.head}:${o.locked}`).join('|');
+    const key = objs.map((o) => `${o.id}:${o.color}:${o.size}:${o.tag}:${o.dash}:${o.head}:${o.locked}`).join('|') + `:${this.widgets?.interactive || ''}`;
     if (key !== this.ctxKey) { this.ctxKey = key; this.buildContext(objs); }
     const union = this.s.model.contentBounds(ids);
     if (!union) return;
@@ -349,12 +353,18 @@ export class UI {
       els.push(h('button', { class: `ctx-text ${single.head === 'none' ? '' : 'on'}`, 'aria-pressed': String(single.head !== 'none'), onclick: () => patch({ head: single.head === 'none' ? 'arrow' : 'none' }, 'Arrow head') }, h('span', {}, 'Head')));
     }
     if (single && ['note', 'text', 'shape', 'frame', 'arrow', 'link'].includes(single.type)) els.push(this.iconBtn('text', 'Edit text (Enter)', () => this.startEdit(single.id)));
+    if (single?.type === 'widget') {
+      const using = this.widgets?.interactive === single.id;
+      els.push(h('button', { class: `ctx-text ${using ? 'on' : ''}`, 'aria-pressed': String(using), title: 'Use the widget (double-tap)', onclick: () => { this.widgets?.setInteractive(using ? null : single.id); this.ctxKey = ''; this.updateContext(); } }, h('span', { html: ICON.tap }), h('span', {}, using ? 'Done' : 'Use')));
+      els.push(this.iconBtn('refresh', 'Reload widget', () => this.widgets?.reload(single.id)));
+      if (this.full) els.push(this.iconBtn('ask', 'Ask the assistant to change this widget', () => this.openAsk(`Change the "${single.title || 'widget'}" widget: `)));
+    }
     if (els.length) els.push(h('span', { class: 'sep' }));
     els.push(this.iconBtn('copy', 'Duplicate (Ctrl+D)', () => this.s.duplicate(ids)));
     els.push(this.iconBtn('front', 'Bring to front', () => this.s.reorder(ids, 'front')));
     const locked = objs.every((o) => o.locked);
     els.push(this.iconBtn(locked ? 'unlock' : 'lock', locked ? 'Unlock' : 'Lock in place', () => patch({ locked: locked ? null : true }, locked ? 'Unlock' : 'Lock')));
-    if (this.full) els.push(this.iconBtn('ask', 'Ask the assistant about this', () => this.openAsk(`About the selected ${objs.length > 1 ? 'items' : objs[0].type}: `)));
+    if (this.full && single?.type !== 'widget') els.push(this.iconBtn('ask', 'Ask the assistant about this', () => this.openAsk(`About the selected ${objs.length > 1 ? 'items' : objs[0].type}: `)));
     els.push(this.iconBtn('trash', 'Delete', () => this.s.deleteObjects(ids), 'danger'));
     this.ctx.append(...els);
   }

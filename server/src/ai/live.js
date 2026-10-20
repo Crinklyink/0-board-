@@ -11,8 +11,8 @@ const LIVE_WS_PATH = '/ws/google.ai.generativelanguage.v1beta.GenerativeService.
  * are executed here (same validated tools as the text path) so every board change is persisted and synced.
  */
 export class LiveService {
-  constructor({ store, hub, gemini, settings, assets, pending, config }) {
-    Object.assign(this, { store, hub, gemini, settings, assets, pending, config });
+  constructor({ store, hub, gemini, settings, assets, pending, secrets, widgets, config }) {
+    Object.assign(this, { store, hub, gemini, settings, assets, pending, secrets, widgets, config });
   }
 
   async start({ boardId, selection = [] }) {
@@ -34,7 +34,7 @@ export class LiveService {
 
   /** The `setup` frame the phone sends first. Built server-side so prompt and tools stay consistent. */
   #setup({ boardId, selection, settings }) {
-    const ctx = boardContext({ store: this.store, pending: this.pending, boardId, selection, anchor: this.hub.display.cam });
+    const ctx = boardContext({ store: this.store, pending: this.pending, widgets: this.widgets, boardId, selection, anchor: this.hub.display.cam });
     return {
       model: `models/${settings.liveModel}`,
       generationConfig: {
@@ -57,13 +57,13 @@ export class LiveService {
   }
 
   /** Execute one tool call that Gemini Live asked the phone to perform. */
-  runTool({ boardId, name, args, selection = [], sessionId }) {
+  async runTool({ boardId, name, args, selection = [], sessionId }) {
     const ctx = new ToolContext({
-      store: this.store, hub: this.hub, assets: this.assets, pending: this.pending, settings: this.settings.get(), boardId,
+      store: this.store, hub: this.hub, assets: this.assets, pending: this.pending, secrets: this.secrets, widgets: this.widgets, settings: this.settings.get(), boardId,
       turnId: sessionId || 'live', selection, live: true,
     });
     ctx.tz = this.config.tz;
-    const result = runTool(name, args, ctx);
+    const result = await runTool(name, args, ctx);
     if (name !== 'focus_tv') this.hub.reveal(ctx.boardId, ctx.takeTouched());
     return { result: JSON.parse(JSON.stringify(result && typeof result === 'object' ? result : { result })), boardId: ctx.switchedTo || boardId, changed: ctx.changed, batches: ctx.batches };
   }

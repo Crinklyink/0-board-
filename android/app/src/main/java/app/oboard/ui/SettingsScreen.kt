@@ -63,6 +63,7 @@ fun SettingsScreen(vm: AppViewModel, page: SettingsPage, onPage: (SettingsPage) 
     val title = when (page) {
         SettingsPage.Main -> "Settings"; SettingsPage.Connection -> "Connection"; SettingsPage.Voice -> "Voice"
         SettingsPage.Models -> "Voice models"; SettingsPage.Assistant -> "Assistant"; SettingsPage.Backup -> "Backup & export"
+        SettingsPage.ApiKeys -> "API keys"
         SettingsPage.About -> "About"
     }
     Column(Modifier.fillMaxSize().background(O.Bg).windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
@@ -79,6 +80,7 @@ fun SettingsScreen(vm: AppViewModel, page: SettingsPage, onPage: (SettingsPage) 
                     SettingsPage.Voice -> VoicePage(vm, onPage)
                     SettingsPage.Models -> ModelsPage(vm)
                     SettingsPage.Assistant -> AssistantPage(vm)
+                    SettingsPage.ApiKeys -> ApiKeysPage(vm)
                     SettingsPage.Backup -> BackupPage(vm)
                     SettingsPage.About -> AboutPage()
                 }
@@ -98,6 +100,9 @@ private fun MainPage(vm: AppViewModel, onPage: (SettingsPage) -> Unit) {
     RowItem("Voice", subtitle = if (s.voiceEngine == "live") "Gemini Live · ${s.liveVoice}" else "On-device · ${engine.label} · $voiceName", icon = OIcons.Speaker, onClick = { onPage(SettingsPage.Voice) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
     RowItem("Voice models", subtitle = if (vm.voiceReady) "Installed" else "Not downloaded yet", icon = OIcons.Download, onClick = { onPage(SettingsPage.Models) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
     RowItem("Assistant", subtitle = "Gemini models and behaviour (stored on the Pi)", icon = OIcons.Bulb, onClick = { onPage(SettingsPage.Assistant) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
+    val keys by vm.apiKeys.collectAsState()
+    val keysNeeded = keys.count { !it.set }
+    RowItem("API keys", subtitle = if (keysNeeded > 0) "$keysNeeded needed by widgets" else if (keys.isEmpty()) "For widgets that use outside services" else "${keys.size} saved on the Pi", icon = OIcons.Key, onClick = { onPage(SettingsPage.ApiKeys) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
     RowItem("Backup & export", subtitle = "Copy everything off the Pi", icon = OIcons.Inbox, onClick = { onPage(SettingsPage.Backup) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
     RowItem("About", subtitle = "Version ${BuildConfig.VERSION_NAME}", icon = OIcons.Doc, onClick = { onPage(SettingsPage.About) }) { Icon(OIcons.ChevronRight, null, Modifier.size(18.dp), tint = O.Text3) }
 }
@@ -388,7 +393,7 @@ private fun AboutPage() {
     SectionLabel("Open-source components")
     listOf(
         "sherpa-onnx (Apache-2.0)", "ONNX Runtime (MIT)", "Qwen3-ASR 0.6B (Apache-2.0)", "Kokoro-82M (Apache-2.0)",
-        "Supertonic 3, optional download (OpenRAIL-M model, MIT code)", "Silero VAD (MIT)",
+        "Supertonic 3, optional download (OpenRAIL-M model, MIT code)", "Silero VAD (MIT)", "Chart.js, for widgets (MIT)",
         "espeak-ng data (GPL-3.0, used as data by sherpa-onnx)", "Inter typeface (SIL OFL 1.1)", "OkHttp (Apache-2.0)",
         "Apache Commons Compress (Apache-2.0)", "Jetpack Compose and AndroidX (Apache-2.0)", "Kotlin coroutines/serialization (Apache-2.0)",
     ).forEach { Text(it, Modifier.padding(vertical = 3.dp), style = MaterialTheme.typography.bodySmall, color = O.Text2) }

@@ -41,9 +41,14 @@ data class BoardInfo(
     val count: Int = 0,
     val updatedAt: Long = 0,
     val openedAt: Long = 0,
+    val preview: BoardPreview? = null,
 ) {
     val isThoughts get() = kind == "thoughts"
 }
+
+/** A tiny sketch of a board: boxes as [x, y, w, h, kind, color] in 0..1 of the content, and its aspect ratio. */
+@Serializable
+data class BoardPreview(val a: Float = 1f, val b: List<List<Float>> = emptyList())
 
 @Serializable
 data class Cam(val x: Double, val y: Double, val z: Double)
@@ -128,6 +133,22 @@ data class AiSettings(
 @Serializable
 data class DeviceInfo(val id: String, val name: String, val role: String, val createdAt: Long = 0, val lastSeen: Long = 0)
 
+/** An API key for widgets, as the Pi describes it. The key itself never leaves the Pi. */
+@Serializable
+data class ApiKeyInfo(
+    val name: String,
+    val host: String,
+    val service: String = "",
+    val signupUrl: String = "",
+    val why: String = "",
+    val set: Boolean = false,
+    val createdAt: Long = 0,
+    val updatedAt: Long? = null,
+    val requestedAt: Long? = null,
+) {
+    val label: String get() = service.ifBlank { name }
+}
+
 @Serializable
 data class PendingConfirm(val id: String, val boardId: String = "", val summary: String, val expiresAt: Long = 0)
 
@@ -140,6 +161,8 @@ sealed interface ServerEvent {
     data class Message(val message: ChatMessage) : ServerEvent
     data class Confirm(val pending: PendingConfirm) : ServerEvent
     data class ConfirmResolved(val id: String) : ServerEvent
+    /** API keys changed on the Pi (one was saved, removed, or the assistant asked for one). */
+    data class Keys(val name: String?) : ServerEvent
 }
 
 enum class Link { Connecting, Online, Offline, Unauthorized }

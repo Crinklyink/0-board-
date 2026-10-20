@@ -70,6 +70,8 @@ export class Api {
     if (!res.ok) {
       const err = new Error(json?.error || `Request failed (${res.status})`);
       err.status = res.status;
+      err.code = json?.code;
+      err.body = json;
       throw err;
     }
     return json;

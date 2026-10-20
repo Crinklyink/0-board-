@@ -138,6 +138,7 @@ class Events(httpClient: OkHttpClient, private val scope: CoroutineScope) {
             "msg" -> o["message"]?.let { _events.tryEmit(ServerEvent.Message(AppJson.decodeFromJsonElement(ChatMessage.serializer(), it))) }
             "pending" -> o["pending"]?.let { _events.tryEmit(ServerEvent.Confirm(AppJson.decodeFromJsonElement(PendingConfirm.serializer(), it))) }
             "pending.resolved" -> _events.tryEmit(ServerEvent.ConfirmResolved(o["id"]?.jsonPrimitive?.contentOrNull ?: ""))
+            "secrets" -> _events.tryEmit(ServerEvent.Keys(o["name"]?.jsonPrimitive?.contentOrNull))
             else -> Unit
         }
     }

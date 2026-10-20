@@ -1,6 +1,6 @@
 {
   "name": "oboard-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "O Board: Raspberry Pi server (sync, SQLite, Gemini actions)",
   "private": true,
   "type": "module",

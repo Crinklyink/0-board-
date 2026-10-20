@@ -140,7 +140,10 @@ private fun MainScaffold(vm: AppViewModel) {
                 Header(DESTS.first { it.tab == tab }.label, link, tvOnline, queued.size, showSettings = false) { vm.overlay.value = Overlay.Settings() }
                 Box(Modifier.weight(1f)) {
                     content(Modifier.fillMaxSize())
-                    ConfirmBar(vm, Modifier.align(Alignment.BottomCenter))
+                    Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (tab != Tab.Capture) KeyRequestBar(vm) // Capture shows it right above its message box
+                        ConfirmBar(vm, Modifier)
+                    }
                 }
             }
         }
@@ -151,7 +154,10 @@ private fun MainScaffold(vm: AppViewModel) {
             Header(DESTS.first { it.tab == tab }.label, link, tvOnline, queued.size, showSettings = true) { vm.overlay.value = Overlay.Settings() }
             Box(Modifier.weight(1f)) {
                 content(Modifier.fillMaxSize())
-                ConfirmBar(vm, Modifier.align(Alignment.BottomCenter))
+                Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (tab != Tab.Capture) KeyRequestBar(vm) // Capture shows it right above its message box
+                    ConfirmBar(vm, Modifier)
+                }
             }
             if (!typing) {
                 Row(

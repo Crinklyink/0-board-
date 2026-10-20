@@ -1,6 +1,6 @@
 # Test report
 
-Version 0.1.0, 19 October 2026. A test is marked as passing only if it actually ran.
+Version 0.2.0, 19 October 2026. A test is marked as passing only if it actually ran.
 
 **Test environment:**
 - Windows 11 PC: AMD, 16 logical cores, no NVIDIA GPU.
@@ -32,7 +32,7 @@ it does **not** prove that real Gemini makes good choices.
 | H. Recovery: reconnect, interrupt, restart | **Pass** for each part tested (details below) |
 | I. APK: signed, installable, compatible | **Pass** for build, signature, alignment and the emulator. **Not installed on a physical Fold 7** |
 
-Automated suite: `cd server && npm test` runs **52 tests, 52 pass**. They cover the store, the server, the AI tools
+Automated suite: `cd server && npm test` runs **56 tests, 56 pass**. They cover the store, the server, widgets and API keys, the AI tools
 (against the stand-in), and layout and schema.
 
 ## Details
@@ -143,12 +143,12 @@ shutdown (WAL checkpointed, `quick_check ok`) and backup round-trips.
 
 ### I. APK
 
-`dist/OBoard-0.1.0-arm64.apk`: 36.2 MB, SHA-256
-`7c02548c314fa0400b4012be7028495d8fc749f69bae4854ce4b62ad36dd7549`.
+`dist/OBoard-0.2.0-arm64.apk`: 36.3 MB, SHA-256
+`e37e5329247e22af079d81ccaabc10d0e0c61c00aba90de9d944e2802e647605`.
 
 | Check | Result |
 |---|---|
-| Package | `app.oboard` 0.1.0 (1), minSdk 29, targetSdk 36, compileSdk 37 |
+| Package | `app.oboard` 0.2.0 (2), minSdk 29, targetSdk 36, compileSdk 37 |
 | Signature (`apksigner verify`) | Verifies; APK Signature Scheme v2; 1 signer `CN=O Board, O=Personal` |
 | 16 KB page support | `zipalign -c -P 16` OK, and every native library's LOAD segments are 16 KB aligned (needed on Android 15+ devices) |
 | Native code | `arm64-v8a` only (the Fold 7's ABI) |
@@ -160,6 +160,65 @@ shutdown (WAL checkpointed, `quick_check ok`) and backup round-trips.
 - An arm64-only build on the x86 emulator runs through Android's arm translation layer, which crashed inside the
   speech runtime. That is a limitation of the translation layer; real arm64 hardware runs the code natively.
 - This should be confirmed on the phone: install the APK, then run **Settings → Voice → Run voice self-test**.
+
+### Live widgets and API keys (added after the first release)
+
+Widgets were checked in **real Chrome** (headless, the TV kiosk's engine) and in the **Android WebView** of the phone
+app. Data came from real services.
+
+**Asking for a widget:** with the TV view open, "Can you track NVDA stock on the board?" worked end to end:
+1. The assistant (the stand-in, which always writes the same pre-made NVDA widget) created the widget.
+2. The TV moved to it and ran it.
+3. The widget reported back "NVDA … $217.09 +2.96 (+1.38%) … [1 chart]".
+4. The spoken reply quoted the live price: "NVDA is on the board at $217.09."
+
+That took 2.1 s in total. The widget showed the day's chart from Yahoo Finance.
+
+**Fixing its own mistakes (automated):**
+1. The first code threw `ReferenceError`; the screen reported it, and the tool returned the error to the model.
+2. The model called `update_widget` with corrected code, and the tool returned "running" with the visible text.
+3. Code using `fetch()` directly is refused before it runs, with a hint to use `ob.fetch`.
+
+**Runtime behaviour (real Chrome):**
+- A widget needing a missing key showed "Waiting for an API key" and reported it. Once the key was saved, it
+  restarted by itself and called the provider.
+- A broken widget showed an error panel and reported `ReferenceError: nope is not defined`.
+- A widget using top-level `await` ran and showed real weather: "NYC 12.9 °C" from Open-Meteo.
+- A counter widget saved its data on the board (`{"n":41}`).
+
+**On the phone (emulator):**
+- The same widgets ran inside the app's board view.
+- Double-tapping the counter entered "Use" mode. Two taps on its button made it 43, and that was saved to the board.
+
+**API keys:**
+- With Twelve Data's public `demo` key saved for `api.twelvedata.com`, a request using `{{TWELVE_DATA_KEY}}` returned
+  a real Apple quote ($342.94).
+- The same key was refused when sent to:
+  - another website;
+  - another website in a header;
+  - plain http;
+  - a lookalike domain (`api.twelvedata.com.evil.example`);
+  - a host name.
+- Automated tests also show:
+  - the TV cannot add keys;
+  - key values are never returned by the API;
+  - keys are not in the full backup;
+  - a redirect to another host drops key headers;
+  - repeated requests are answered from the cache.
+- On the phone, the assistant's `request_api_key` made the key card appear above the message box. It says where the
+  key is kept and which website it is sent to.
+
+**Home network protection:** requests to `192.168.1.1`, `127.0.0.1`, `localhost` and `169.254.169.254` were refused
+(live and automated). The local service was never contacted.
+
+**Bug found and fixed while testing:** the phone app read some server responses on the main thread. Small responses
+happened to work, but the larger board list (with the new thumbnails) failed. All responses are now read on a
+background thread.
+
+**Not tested:**
+- Real Gemini writing widget code. The stand-in always returns the same pre-made NVDA widget, so the quality of the
+  widgets Gemini writes is unverified.
+- Widgets on the Pi's kiosk hardware.
 
 ### Pi installer (extra)
 
@@ -180,7 +239,7 @@ shutdown (WAL checkpointed, `quick_check ok`) and backup round-trips.
 
 ## Still unverified, in priority order
 
-1. Real Gemini (C, G, and D's quality). It needs your API key.
+1. Real Gemini (C, G, D's quality, and how well it writes widgets). It needs your API key.
 2. Installing and using the APK on the Fold 7, including on-device voice speed and quality, and the microphone.
 3. The Pi on real hardware: the TV kiosk, HDMI audio, and Avahi discovery from the phone.
 4. Gemini Live against Google's real endpoint, including ephemeral-token minting.

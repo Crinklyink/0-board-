@@ -55,6 +55,8 @@ export const config = {
   // The Pi's own network addresses, including Tailscale, are found automatically.
   publicUrls: (env.PUBLIC_URLS || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter((s) => /^https?:\/\/\S+$/.test(s)),
   maxUploadBytes: Number(env.MAX_UPLOAD_MB || 40) * 1024 * 1024,
+  // Widgets normally cannot fetch from addresses inside the home network. Tests and local development can allow it.
+  widgetAllowPrivate: env.WIDGET_ALLOW_PRIVATE === '1',
   backupEveryHours: Number(env.BACKUP_EVERY_HOURS || 6),
   backupKeep: Number(env.BACKUP_KEEP || 14),
   tz: env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,

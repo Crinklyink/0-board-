@@ -9,6 +9,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { TvController } from './tv.js';
 import { RemoteController } from './remote.js';
+import { WidgetLayer } from './widgets.js';
 
 const cfg = loadConfig();
 document.documentElement.dataset.mode = cfg.mode;
@@ -36,7 +37,10 @@ function start() {
   const renderer = new Renderer(canvas, { model, camera, api, dprCap });
   session = new Session({ cfg, api, net, model, camera, renderer });
   const editor = new Editor({ host: document.getElementById('stage'), session });
-  const ui = new UI({ root, session, editor, cfg, api });
+  const widgets = new WidgetLayer({ host: document.getElementById('stage'), before: root, session, api, cfg });
+  renderer.widgetLive = (id) => widgets.isLive(id);
+  renderer.onFrame = () => widgets.sync();
+  const ui = new UI({ root, session, editor, cfg, api, widgets });
   const input = new Input({ canvas, session, ui });
   ui.input = input;
   session.input = input;
@@ -93,7 +97,7 @@ function start() {
 
   // Surface for the Android host (and for debugging in a desktop browser).
   window.oboard = {
-    session, model, camera, input, ui, net,
+    session, model, camera, input, ui, net, widgets,
     setTool: (t) => input.setTool(t),
     undo: () => session.undo(),
     redo: () => session.redo(),

@@ -10,6 +10,11 @@ import { runTool, ToolContext } from './ai/tools.js';
 
 const PROTOCOL = 1;
 
+const PAGE_CSP = "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; frame-src 'self'; frame-ancestors 'none'";
+// The frame widgets run in (always sandboxed, without same-origin). Their code is inline, but they get no network at
+// all: data only comes through the board page, which asks the Pi's proxy. Keys never enter the frame.
+export const WIDGET_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
+
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -18,7 +23,7 @@ const MIME = {
 };
 
 export function createApp(deps) {
-  const { store, auth, hub, assets, agent, live, settings, gemini, backups, pending, config } = deps;
+  const { store, auth, hub, assets, agent, live, settings, gemini, backups, pending, secrets, widgets, config } = deps;
   const routes = [];
   const route = (method, pattern, opts, handler) => {
     if (typeof opts === 'function') { handler = opts; opts = {}; }
@@ -66,7 +71,12 @@ export function createApp(deps) {
 
   // ---- boards ---------------------------------------------------------------------------------
 
-  route('GET', '/api/boards', (ctx) => ctx.json({ boards: store.listBoards({ includeArchived: ctx.query.get('archived') === '1' }), display: hub.display }));
+  route('GET', '/api/boards', (ctx) => {
+    const boards = store.listBoards({ includeArchived: ctx.query.get('archived') === '1' });
+    // ?preview=1 adds a small layout sketch per board (the phone draws thumbnails from it).
+    const withPreview = ctx.query.get('preview') === '1' ? boards.map((b) => ({ ...b, preview: store.boardPreview(b.id, b.rev) })) : boards;
+    ctx.json({ boards: withPreview, display: hub.display });
+  });
 
   route('POST', '/api/boards', async (ctx) => {
     const b = await ctx.body();
@@ -110,13 +120,13 @@ export function createApp(deps) {
     ctx.json({ rev: out.rev, changes: out.ops.length });
   });
 
-  route('POST', '/api/boards/:id/undo-ai', (ctx) => {
-    const tctx = new ToolContext({ store, hub, assets, pending, settings: settings.get(), boardId: ctx.params.id, turnId: 'ui', selection: [] });
-    ctx.json(runTool('undo_ai_change', {}, tctx));
+  route('POST', '/api/boards/:id/undo-ai', async (ctx) => {
+    const tctx = new ToolContext({ store, hub, assets, pending, secrets, widgets, settings: settings.get(), boardId: ctx.params.id, turnId: 'ui', selection: [] });
+    ctx.json(await runTool('undo_ai_change', {}, tctx));
   });
-  route('POST', '/api/boards/:id/redo-ai', (ctx) => {
-    const tctx = new ToolContext({ store, hub, assets, pending, settings: settings.get(), boardId: ctx.params.id, turnId: 'ui', selection: [] });
-    ctx.json(runTool('redo_ai_change', {}, tctx));
+  route('POST', '/api/boards/:id/redo-ai', async (ctx) => {
+    const tctx = new ToolContext({ store, hub, assets, pending, secrets, widgets, settings: settings.get(), boardId: ctx.params.id, turnId: 'ui', selection: [] });
+    ctx.json(await runTool('redo_ai_change', {}, tctx));
   });
 
   route('GET', '/api/boards/:id/export', (ctx) => {
@@ -237,8 +247,41 @@ export function createApp(deps) {
 
   route('POST', '/api/live/tool', async (ctx) => {
     const b = await ctx.body();
-    ctx.json(live.runTool({ boardId: b.boardId || hub.display.boardId, name: String(b.name || ''), args: b.args, selection: b.selection, sessionId: b.sessionId }));
+    ctx.json(await live.runTool({ boardId: b.boardId || hub.display.boardId, name: String(b.name || ''), args: b.args, selection: b.selection, sessionId: b.sessionId }));
   });
+
+  // ---- widgets and their API keys -------------------------------------------------------------
+
+  route('GET', '/api/secrets', (ctx) => ctx.json({ secrets: secrets.list() }));
+
+  route('PUT', '/api/secrets/:name', async (ctx) => {
+    if (ctx.device.role === 'display') throw new HttpError(403, 'Add keys from the phone app or a paired browser');
+    const b = await ctx.body(16 * 1024);
+    let info;
+    try { info = secrets.set(ctx.params.name, { value: b.value, host: b.host, service: b.service }); } catch (e) { throw new HttpError(400, e.message); }
+    hub.broadcast({ t: 'secrets', name: info.name, set: true });
+    ctx.json({ secret: info });
+  });
+
+  route('DELETE', '/api/secrets/:name', (ctx) => {
+    if (ctx.device.role === 'display') throw new HttpError(403, 'Not allowed from the TV');
+    if (!secrets.delete(ctx.params.name)) throw new HttpError(404, 'No such key');
+    hub.broadcast({ t: 'secrets', name: ctx.params.name, set: false });
+    ctx.json({ ok: true });
+  });
+
+  route('POST', '/api/widgets/fetch', async (ctx) => {
+    const b = await ctx.body(64 * 1024);
+    ctx.json(await widgets.fetch({ url: b.url, headers: b.headers || {}, cache: b.cache ?? 10, widgetId: String(b.widgetId || '').slice(0, 48) }));
+  });
+
+  route('POST', '/api/widgets/:id/report', async (ctx) => {
+    const b = await ctx.body(16 * 1024);
+    widgets.report({ boardId: String(b.boardId || ''), widgetId: ctx.params.id, level: b.level, message: b.message, hash: b.hash, text: b.text, client: ctx.device.name });
+    ctx.json({ ok: true });
+  });
+
+  route('GET', '/api/widgets/:id/logs', (ctx) => ctx.json({ status: widgets.status(ctx.params.id), logs: widgets.recent(ctx.params.id, 30) }));
 
   route('POST', '/api/live/transcript', async (ctx) => {
     const b = await ctx.body();
@@ -306,7 +349,9 @@ export function createApp(deps) {
     const headers = {
       'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       etag, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff',
-      'content-security-policy': "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; frame-ancestors 'none'",
+      'content-security-policy': rel === '/widget.html' ? WIDGET_CSP : PAGE_CSP,
+      // Widget frames have an opaque origin, and fonts load in CORS mode: allow them to use the board's typeface.
+      ...(/\.woff2?$/.test(file) ? { 'access-control-allow-origin': '*' } : {}),
     };
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); res.end(); return true; }
     res.writeHead(200, { ...headers, 'content-length': st.size });

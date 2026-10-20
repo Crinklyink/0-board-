@@ -57,11 +57,15 @@ const points = (v, k) => {
     return Math.round(n * 10) / 10;
   });
 };
-const meta = (v, k) => {
+const jsonObject = (max) => (v, k) => {
   if (!v || typeof v !== 'object' || Array.isArray(v)) bad(`${k} must be an object`);
-  if (JSON.stringify(v).length > 2000) bad(`${k} is too large`);
+  if (JSON.stringify(v).length > max) bad(`${k} is too large (max ${max} characters as JSON)`);
   return v;
 };
+const meta = jsonObject(2000);
+
+export const WIDGET_HTML_MAX = 100_000;
+export const WIDGET_STATE_MAX = 8000;
 
 const color = oneOf(COLORS);
 const size = oneOf(SIZES);
@@ -88,6 +92,8 @@ export const PROPS = {
   image: { asset: idStr, alt: str(500) },
   file: { asset: idStr, name: str(300), mime: str(100) },
   link: { url: str(2000), title: str(300) },
+  // A live mini-app (ticker, chart, timer...). `html` runs sandboxed on each screen; `state` is its small saved data.
+  widget: { title: str(200), html: str(WIDGET_HTML_MAX), state: jsonObject(WIDGET_STATE_MAX) },
 };
 
 export const TYPES = Object.keys(PROPS);
@@ -104,6 +110,7 @@ const REQUIRED = {
   image: ['x', 'y', 'w', 'h', 'asset'],
   file: ['x', 'y', 'w', 'h', 'asset'],
   link: ['x', 'y', 'w', 'h', 'url'],
+  widget: ['x', 'y', 'w', 'h', 'html'],
 };
 
 export function defaultsFor(type) {
@@ -114,6 +121,7 @@ export function defaultsFor(type) {
     case 'frame': return { w: 640, h: 420, color: 'gray', title: '' };
     case 'link': return { w: 260, h: 84, title: '' };
     case 'file': return { w: 240, h: 84, name: 'File' };
+    case 'widget': return { w: 420, h: 300, title: 'Widget' };
     case 'arrow': return { color: 'default', head: 'arrow', dash: false };
     default: return {};
   }
@@ -190,8 +198,20 @@ export function objectText(o) {
     case 'image': return o.alt || '';
     case 'file': return o.name || '';
     case 'link': return `${o.title || ''} ${o.url || ''}`.trim();
+    case 'widget': return o.title || '';
     default: return '';
   }
+}
+
+/** Short fingerprint of a widget's code, so a report from a screen can be matched to the version that produced it. */
+export function codeHash(s) {
+  let h = 0x811c9dc5;
+  const str = String(s || '');
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
 /** Rough height for a note, for server-side placement. The client measures real text and wins when autoH is on. */

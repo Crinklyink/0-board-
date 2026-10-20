@@ -18,6 +18,7 @@ import app.oboard.data.DeviceInfo
 import app.oboard.data.ImagePrep
 import app.oboard.data.Link
 import app.oboard.data.PendingConfirm
+import app.oboard.data.ApiKeyInfo
 import app.oboard.data.ServerEvent
 import app.oboard.voice.LiveState
 import app.oboard.voice.ModelCatalog
@@ -43,7 +44,7 @@ import java.io.IOException
 import java.io.OutputStream
 
 enum class Tab { Capture, Boards, Remote }
-enum class SettingsPage { Main, Connection, Voice, Models, Assistant, Backup, About }
+enum class SettingsPage { Main, Connection, Voice, Models, Assistant, ApiKeys, Backup, About }
 
 sealed interface Overlay {
     data class Canvas(val boardId: String) : Overlay
@@ -118,10 +119,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
-        viewModelScope.launch { c.events.boards.collect { if (it.isNotEmpty()) _boards.value = it } }
+        viewModelScope.launch {
+            c.events.boards.collect { list ->
+                if (list.isEmpty()) return@collect
+                // The live list has no thumbnails: keep the ones we have, then fetch fresh ones.
+                val old = _boards.value.associateBy { it.id }
+                _boards.value = list.map { b -> b.copy(preview = old[b.id]?.preview) }
+                refreshBoards()
+            }
+        }
         viewModelScope.launch { c.events.boardsChanged.collect { refreshBoards() } }
         viewModelScope.launch {
-            link.collect { if (it == Link.Online) { refreshBoards(); loadThread() } }
+            link.collect { if (it == Link.Online) { refreshBoards(); loadThread(); loadApiKeys() } }
         }
         viewModelScope.launch { aiBoard.map { it }.distinctUntilChanged().collect { loadThread() } }
         viewModelScope.launch { c.events.events.collect { onEvent(it) } }
@@ -179,6 +188,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             is ServerEvent.Confirm -> confirms.value = confirms.value.filterNot { it.id == e.pending.id } + e.pending
             is ServerEvent.ConfirmResolved -> confirms.value = confirms.value.filterNot { it.id == e.id }
+            is ServerEvent.Keys -> loadApiKeys()
         }
     }
 
@@ -187,6 +197,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "move_objects" -> "Moving things"; "connect_objects" -> "Connecting"; "edit_object" -> "Editing"
         "delete_objects" -> "Checking what to delete"; "search_board", "read_board", "read_objects" -> "Reading the board"
         "focus_tv" -> "Moving the TV view"; "recall" -> "Remembering"; "view_images" -> "Looking at images"
+        "create_widget" -> "Building a widget"; "update_widget" -> "Fixing the widget"; "read_widget_logs" -> "Checking the widget"
+        "request_api_key" -> "Asking for an API key"; "list_api_keys" -> "Checking API keys"
+        "create_section", "group_into_section" -> "Grouping"; "resize_object" -> "Resizing"; "switch_board", "create_board" -> "Switching boards"
+        "undo_ai_change" -> "Undoing"; "restore_version", "list_versions" -> "Finding the earlier version"
         else -> "Working"
     }
 
@@ -228,7 +242,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------------------- boards
 
     fun refreshBoards() = viewModelScope.launch {
-        runCatching { c.api.boards() }.onSuccess { (list, _) -> _boards.value = list }
+        runCatching { c.api.boards() }
+            .onSuccess { (list, _) -> _boards.value = list }
+            .onFailure { android.util.Log.w("OBoard", "Could not load boards", it) }
     }
 
     fun loadThread() = viewModelScope.launch {
@@ -529,6 +545,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val geminiReady = MutableStateFlow<Boolean?>(null)
     val models = MutableStateFlow<List<String>>(emptyList())
     val devices = MutableStateFlow<List<DeviceInfo>>(emptyList())
+
+    /** API keys for widgets (names and websites only). Missing ones the assistant asked for show as a card. */
+    val apiKeys = MutableStateFlow<List<ApiKeyInfo>>(emptyList())
+    val dismissedKeyRequests = MutableStateFlow<Set<String>>(emptySet())
+
+    fun loadApiKeys() = viewModelScope.launch { runCatching { c.api.apiKeys() }.onSuccess { apiKeys.value = it } }
+
+    /** Returns null on success, or a message to show. */
+    suspend fun saveApiKey(name: String, value: String, host: String? = null, service: String? = null): String? {
+        val r = runCatching { c.api.saveApiKey(name.trim(), value.trim(), host?.trim()?.ifBlank { null }, service?.trim()?.ifBlank { null }) }
+        loadApiKeys()
+        return r.exceptionOrNull()?.let { it.message ?: "Couldn't save the key" }
+    }
+
+    fun deleteApiKey(name: String) = viewModelScope.launch { runCatching { c.api.deleteApiKey(name) }; loadApiKeys() }
 
     fun loadAiSettings() = viewModelScope.launch {
         runCatching { c.api.aiSettings() }.onSuccess { (s, ok) -> aiSettings.value = s; geminiReady.value = ok }

@@ -3,10 +3,12 @@
 //   node tools/mock-gemini.mjs            (listens on :8099)
 //   GEMINI_API_KEY=dev GEMINI_BASE_URL=http://127.0.0.1:8099 node server/src/index.js
 // It reacts to keywords in the user's message by calling the real server tools. It is NOT an AI and understands nothing.
+import fs from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 
 const PORT = Number(process.env.MOCK_PORT || 8099);
+const NVDA_WIDGET = fs.readFileSync(new URL('./examples/nvda-widget.html', import.meta.url), 'utf8').replace(/^<!--.*?-->\s*/s, '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const say = (text) => ({ parts: [{ text }] });
 const call = (name, args) => ({ parts: [{ functionCall: { name, args } }] });
@@ -29,7 +31,16 @@ function respond(body) {
   if (sawTool) {
     const fr = last.parts.find((p) => p.functionResponse).functionResponse;
     if (fr.response?.status === 'needs_confirmation') return [say('That would remove several things. Want me to go ahead?')];
+    if (fr.name === 'create_widget' && fr.response?.ok) {
+      const r = fr.response;
+      if (r.status === 'running') return [say(`NVDA is on the board at ${r.shows.match(/\$[\d,.]+/)?.[0] || 'its latest price'}. It updates every minute.`)];
+      if (r.status === 'error') return [say(`The widget hit an error: ${r.error}`)];
+      return [say('The NVDA widget is on the board. It starts when the TV shows it.')];
+    }
     return [say(fr.response?.ok === false ? `I hit a problem: ${fr.response.error}` : 'Done. It is on the board now.')];
+  }
+  if (/track|ticker|stock|nvda|widget/.test(text)) {
+    return [call('create_widget', { title: 'NVDA live', html: NVDA_WIDGET, w: 440, h: 300 })];
   }
   if (/diagram/.test(text)) {
     return [call('create_diagram', {

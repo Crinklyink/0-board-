@@ -1,7 +1,7 @@
 import { rid, clamp } from '../util.js';
 import { StoreError } from '../store.js';
 import {
-  COLORS, NOTE_WIDTH, estimateNoteHeight, bounds, unionBounds, objectText, rectContains,
+  COLORS, NOTE_WIDTH, estimateNoteHeight, bounds, unionBounds, objectText, rectContains, codeHash, WIDGET_HTML_MAX,
 } from '../../../web/shared/schema.js';
 import { findFreeSpot, nextFlowSlot, layoutGrid, layoutColumns, layoutGraph } from '../../../web/shared/layout.js';
 import { boardContext } from './context.js';
@@ -17,8 +17,8 @@ const snip = (s, n = 90) => {
 
 /** Everything a tool needs for one AI turn (or one Live session call). */
 export class ToolContext {
-  constructor({ store, hub, assets, pending, settings, boardId, turnId, selection = [], anchor = null, live = false }) {
-    Object.assign(this, { store, hub, assets, pending, settings, boardId, turnId, selection, live });
+  constructor({ store, hub, assets, pending, settings, secrets = null, widgets = null, boardId, turnId, selection = [], anchor = null, live = false }) {
+    Object.assign(this, { store, hub, assets, pending, settings, secrets, widgets, boardId, turnId, selection, live });
     this.anchorHint = anchor;
     this.batches = [];
     this.snapshotted = false;
@@ -103,7 +103,7 @@ function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 
-const TEXT_PROP = { note: 'text', text: 'text', shape: 'text', frame: 'title', arrow: 'label', link: 'title', image: 'alt', file: 'name' };
+const TEXT_PROP = { note: 'text', text: 'text', shape: 'text', frame: 'title', arrow: 'label', link: 'title', image: 'alt', file: 'name', widget: 'title' };
 
 function nodeSize(label, detail) {
   const text = detail ? `${label}\n${detail}` : label;
@@ -143,7 +143,7 @@ const O = (properties, required = [], description) => ({ type: 'object', propert
 def('read_board',
   'Get a fresh snapshot of the current board: every object with its id, type, text and position. Call this if you need the latest state.',
   O({}),
-  (a, ctx) => ({ ok: true, snapshot: boardContext({ store: ctx.store, pending: ctx.pending, boardId: ctx.boardId, selection: ctx.selection, anchor: ctx.anchor() }) }));
+  (a, ctx) => ({ ok: true, snapshot: boardContext({ store: ctx.store, pending: ctx.pending, widgets: ctx.widgets, boardId: ctx.boardId, selection: ctx.selection, anchor: ctx.anchor() }) }));
 
 def('read_objects',
   'Read the full text and properties of specific objects (the snapshot only shows shortened text).',
@@ -649,7 +649,7 @@ def('delete_objects',
   (a, ctx) => {
     const objs = [...new Set(idList(a.ids))].map((id) => ctx.must(id));
     const textLen = objs.reduce((n, o) => n + objectText(o).length, 0);
-    const heavy = objs.length > 2 || textLen > 300 || objs.some((o) => ['image', 'file', 'frame'].includes(o.type));
+    const heavy = objs.length > 2 || textLen > 300 || objs.some((o) => ['image', 'file', 'frame', 'widget'].includes(o.type));
     const doDelete = () => {
       ctx.apply(objs.map((o) => ({ op: 'del', id: o.id })), `Deleted ${objs.length} object${objs.length === 1 ? '' : 's'}`);
       return { ok: true, deleted: objs.length };
@@ -731,6 +731,110 @@ def('forget_recent',
     return { ok: true, forgotten: ids.length, note: 'Forgotten. Confirm briefly to the user; this reply will not be stored either.' };
   });
 
+// ---- widgets (live mini-apps) and the API keys they use
+
+const WIDGET_WAIT_MS = 9000;
+
+/** Quick checks that catch the usual mistakes before the code ever runs. */
+function checkWidgetHtml(html) {
+  const code = reqStr(html, 'html', WIDGET_HTML_MAX);
+  if (/<script[^>]+\bsrc\s*=/i.test(code)) throw new ToolError('Do not load scripts with src: Chart.js is already available as the global Chart, and everything else must be inline.');
+  if (/(?<!ob\.)\bfetch\s*\(|XMLHttpRequest|new\s+WebSocket|EventSource/.test(code)) throw new ToolError('The widget has no direct network access. Use await ob.fetch(url, options) instead of fetch/XMLHttpRequest/WebSocket.');
+  if (/(?<![{])\{\{[A-Z][A-Z0-9_]*\}\}(?![}])/.test(code) && !/ob\.fetch/.test(code)) throw new ToolError('{{KEY}} placeholders only work inside ob.fetch URLs or headers.');
+  return code;
+}
+
+async function firstRun(ctx, id, html) {
+  if (!ctx.widgets) return { status: 'unknown' };
+  const watching = ctx.hub?.watching?.(ctx.boardId);
+  if (!watching) return { status: 'not_running_yet', note: 'No screen has this board open right now. The widget will start when the TV or the app shows it.' };
+  ctx.hub.reveal?.(ctx.boardId, [id]);
+  const r = await ctx.widgets.waitForReport(id, codeHash(html), WIDGET_WAIT_MS);
+  if (!r) return { status: 'no_report', note: 'No screen reported back within a few seconds (it may be off screen). Check later with read_widget_logs.' };
+  if (r.level === 'ready') return { status: 'running', shows: r.text || '(no visible text)' };
+  if (r.level === 'needs_key') {
+    const info = ctx.secrets?.info(r.message);
+    return { status: 'waiting_for_key', key: r.message, keyRequested: !!info, note: info ? 'The widget will start by itself once the user saves the key in the app.' : `Call request_api_key for ${r.message} so the user gets a card to add it.` };
+  }
+  return { status: 'error', error: r.message, fix: 'Read the error, then call update_widget with corrected html.' };
+}
+
+def('create_widget',
+  'Put a live widget on the board: a small self-contained web app (HTML, CSS, JavaScript) that runs on the TV and in the app, such as a stock or crypto ticker with a chart, weather, a countdown, a timer, a habit tracker or a calculator. Returns what happened when it first ran, so you can fix errors with update_widget.',
+  O({
+    title: S('Short title shown on the board, e.g. "NVDA live"'),
+    html: S('The widget code: an HTML fragment with markup, <style> and inline <script>. See WIDGETS in your instructions for the runtime (ob.fetch, ob.every, ob.state, Chart).'),
+    w: N('Width in canvas units (default 420; 200-1600)'),
+    h: N('Height in canvas units (default 300; 120-1200)'),
+    nearId: S('Place next to this object id'),
+  }, ['title', 'html']),
+  async (a, ctx) => {
+    const title = reqStr(a.title, 'title', 200);
+    const html = checkWidgetHtml(a.html);
+    const w = clamp(Math.round(num(a.w) ?? 420), 200, 1600);
+    const h = clamp(Math.round(num(a.h) ?? 300), 120, 1200);
+    let anchor = ctx.anchor();
+    if (a.nearId) { const t = ctx.must(a.nearId); anchor = { x: t.x + t.w + 60 + w / 2, y: t.y + t.h / 2 }; }
+    const spot = findFreeSpot(ctx.obstacles(), w, h, anchor);
+    const obj = { id: nid('w_'), type: 'widget', title, html, x: Math.round(spot.x), y: Math.round(spot.y), w, h, origin: 'ai' };
+    ctx.apply([{ op: 'put', obj }], `Added widget: ${snip(title, 40)}`);
+    return { ok: true, id: obj.id, ...(await firstRun(ctx, obj.id, html)) };
+  });
+
+def('update_widget',
+  'Change a widget: replace its code (to fix an error or add a feature), rename it, or resize it. Returns what happened when the new code first ran.',
+  O({ id: S('Widget id'), html: S('Complete new code (not a diff)'), title: S('New title'), w: N('New width'), h: N('New height') }, ['id']),
+  async (a, ctx) => {
+    const o = ctx.must(a.id);
+    if (o.type !== 'widget') throw new ToolError(`${a.id} is a ${o.type}, not a widget`);
+    const set = {};
+    if (a.html !== undefined) set.html = checkWidgetHtml(a.html);
+    if (a.title !== undefined) set.title = reqStr(a.title, 'title', 200);
+    if (num(a.w) !== undefined) set.w = clamp(Math.round(a.w), 200, 1600);
+    if (num(a.h) !== undefined) set.h = clamp(Math.round(a.h), 120, 1200);
+    if (!Object.keys(set).length) throw new ToolError('Nothing to change: pass html, title, w or h');
+    ctx.apply([{ op: 'patch', id: o.id, set }], `Updated widget: ${snip(set.title || o.title, 40)}`);
+    if (set.html === undefined || set.html === o.html) return { ok: true, id: o.id, status: 'updated' };
+    return { ok: true, id: o.id, ...(await firstRun(ctx, o.id, set.html)) };
+  });
+
+def('read_widget_logs',
+  'See how a widget is doing on the screens running it: whether it is running and what it shows, its recent errors, and missing API keys.',
+  O({ id: S('Widget id') }, ['id']),
+  (a, ctx) => {
+    const o = ctx.must(a.id);
+    if (o.type !== 'widget') throw new ToolError(`${a.id} is not a widget`);
+    const current = codeHash(o.html);
+    const logs = (ctx.widgets?.recent(o.id, 12) || []).map((e) => ({
+      level: e.level, message: e.message || undefined, shows: e.text || undefined, screen: e.client, ago: `${Math.round((Date.now() - e.ts) / 1000)} s`, oldCode: e.hash && e.hash !== current ? true : undefined,
+    }));
+    return { ok: true, title: o.title, logs, note: logs.length ? undefined : 'No reports yet: no screen has run this widget since the Pi started.' };
+  });
+
+def('list_api_keys',
+  'List the API keys saved for widgets (names, which website each is for, and whether it is set). Never shows the keys themselves.',
+  O({}),
+  (a, ctx) => ({ ok: true, keys: ctx.secrets?.list().map(({ name, host, service, set }) => ({ name, host, service, set })) || [] }));
+
+def('request_api_key',
+  'Ask the user for an API key a widget needs. A card appears in the O Board app where they paste it; it is stored only on the Pi and only ever sent to the given host. Never ask the user to say or type a key in this conversation.',
+  O({
+    name: S('Name to use in ob.fetch placeholders, capitals and underscores, e.g. FINNHUB_KEY'),
+    service: S('Service name shown to the user, e.g. Finnhub'),
+    host: S('The API host the key is for, e.g. finnhub.io (subdomains included)'),
+    signupUrl: S('Where the user gets a free key'),
+    why: S('One short sentence: what the key is for'),
+  }, ['name', 'service', 'host']),
+  (a, ctx) => {
+    if (!ctx.secrets) throw new ToolError('API keys are not available here');
+    const name = reqStr(a.name, 'name', 48);
+    if (ctx.secrets.has(name)) return { ok: true, status: 'already_set', note: `${name} is already saved. Use {{${name}}} in ob.fetch.` };
+    let info;
+    try { info = ctx.secrets.request({ name, host: a.host, service: a.service, signupUrl: a.signupUrl, why: a.why }); } catch (e) { throw new ToolError(e.message); }
+    ctx.hub?.broadcast({ t: 'secrets', name: info.name, set: false, requested: true });
+    return { ok: true, status: 'requested', key: info.name, host: info.host, note: 'Tell the user that a card is waiting in the O Board app where they can paste the key. It is kept on the Pi only. Do not ask them to read it out.' };
+  });
+
 // ---- the TV and boards
 
 def('focus_tv',
@@ -786,12 +890,11 @@ export function toolDeclarations() {
 }
 
 /** Run one tool. Never throws: errors come back as {ok:false,error} so the model can correct itself. */
-export function runTool(name, args, ctx) {
+export async function runTool(name, args, ctx) {
   const t = TOOLS.get(name);
   if (!t) return { ok: false, error: `Unknown tool "${name}"` };
   try {
-    const out = t.run(args && typeof args === 'object' ? args : {}, ctx);
-    return out;
+    return await t.run(args && typeof args === 'object' ? args : {}, ctx);
   } catch (e) {
     if (e instanceof ToolError || e instanceof StoreError) return { ok: false, error: e.message };
     return { ok: false, error: `Internal error in ${name}: ${e.message}` };
@@ -801,4 +904,5 @@ export function runTool(name, args, ctx) {
 export const MUTATING = new Set([
   'add_notes', 'create_diagram', 'connect_objects', 'create_section', 'group_into_section', 'edit_object', 'move_objects',
   'resize_object', 'organize_objects', 'delete_objects', 'undo_ai_change', 'redo_ai_change', 'restore_version', 'resolve_pending',
+  'create_widget', 'update_widget',
 ]);

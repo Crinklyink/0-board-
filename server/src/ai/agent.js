@@ -16,8 +16,8 @@ const HISTORY_MESSAGES = 24;
  *   persisted canvas operations -> text deltas and tool events are pushed to every connected client.
  */
 export class Agent {
-  constructor({ store, hub, gemini, settings, assets, pending, config }) {
-    Object.assign(this, { store, hub, gemini, settings, assets, pending, config });
+  constructor({ store, hub, gemini, settings, assets, pending, secrets, widgets, config }) {
+    Object.assign(this, { store, hub, gemini, settings, assets, pending, secrets, widgets, config });
     this.turns = new Map();
     this.activeByBoard = new Map();
   }
@@ -92,7 +92,7 @@ export class Agent {
     const { boardId } = turn;
     const settings = this.settings.get();
     const ctx = new ToolContext({
-      store: this.store, hub: this.hub, assets: this.assets, pending: this.pending, settings, boardId,
+      store: this.store, hub: this.hub, assets: this.assets, pending: this.pending, secrets: this.secrets, widgets: this.widgets, settings, boardId,
       turnId: turn.id, selection: turn.selection, anchor: turn.anchor,
     });
     ctx.tz = this.config.tz;
@@ -103,7 +103,7 @@ export class Agent {
     let calls = 0;
     try {
       const contents = this.#history(boardId, turn.message.id);
-      const ctxText = boardContext({ store: this.store, pending: this.pending, boardId, selection: turn.selection, anchor: ctx.anchor() });
+      const ctxText = boardContext({ store: this.store, pending: this.pending, widgets: this.widgets, boardId, selection: turn.selection, anchor: ctx.anchor() });
       const userParts = [{ text: `${ctxText}\n\n${turn.source === 'voice' ? 'USER (spoken)' : 'USER (typed)'}: ${turn.message.text}` }];
       for (const id of turn.attachments) {
         const f = this.assets.read(id);
@@ -153,7 +153,8 @@ export class Agent {
         const responses = [];
         for (const fc of fcalls) {
           if (++calls > MAX_TOOL_CALLS) throw new Error('Too many tool calls in one turn');
-          const result = runTool(fc.name, fc.args, ctx);
+          const result = await runTool(fc.name, fc.args, ctx);
+          if (turn.cancelled) return;
           this.#emit({ ev: 'tool', turnId: turn.id, boardId, name: fc.name, ok: result?.ok !== false, status: result?.status || null });
           if (fc.name !== 'focus_tv') this.#reveal(ctx);
           responses.push({ functionResponse: { name: fc.name, ...(fc.id ? { id: fc.id } : {}), response: sanitize(result) } });
