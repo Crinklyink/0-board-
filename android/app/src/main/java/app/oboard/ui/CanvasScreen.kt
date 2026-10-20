@@ -62,6 +62,7 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var currentBoard by rememberSaveable { mutableStateOf(boardId) }
     var canvasOverlay by remember { mutableStateOf(false) }
+    var canvasPopover by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val topInset = with(density) { WindowInsets.statusBars.getTop(this).toDp().value.toInt() }
     val bottomInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp().value.toInt() }
@@ -69,7 +70,13 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
     val startMic = rememberMicPermission(vm) { vm.micStart() }
     val liveMode = s.voiceEngine == "live"
 
-    BackHandler { if (canvasOverlay) controller.closeOverlay() else onClose() }
+    BackHandler {
+        when {
+            canvasOverlay -> controller.closeOverlay()
+            canvasPopover -> controller.closePopovers()
+            else -> onClose()
+        }
+    }
     // While this board is open, the assistant works on it.
     DisposableEffect(currentBoard) {
         val before = vm.pinnedAiBoard.value
@@ -94,10 +101,11 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
             ) { e ->
                 when (e.type) {
                     "overlay" -> canvasOverlay = e.data.optBoolean("open")
+                    "popover" -> canvasPopover = e.data.optBoolean("open")
                     "ready" -> controller.insets(topInset + 56, bottomInset)
                     "board" -> e.data.optString("id").takeIf { it.isNotBlank() }?.let { currentBoard = it }
-                    // The view is being rebuilt; any panel that was open in the old page is gone with it.
-                    "renderer-gone" -> { canvasOverlay = false; vm.notice("The board view stopped and was reloaded") }
+                    // The view is being rebuilt; any panel or menu that was open in the old page is gone with it.
+                    "renderer-gone" -> { canvasOverlay = false; canvasPopover = false; vm.notice("The board view stopped and was reloaded") }
                 }
             }
             // top bar
@@ -128,8 +136,9 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
                     }
                 }
             }
-            // voice: listening/transcript overlay and the mic
-            if (!canvasOverlay) Column(
+            // voice: listening/transcript overlay and the mic. Hidden while a dialog or menu of the page is open, so it
+            // never covers their buttons; it comes back as soon as they close.
+            if (!canvasOverlay && !canvasPopover) Column(
                 Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 14.dp, bottom = 74.dp),
                 horizontalAlignment = Alignment.End,
             ) {

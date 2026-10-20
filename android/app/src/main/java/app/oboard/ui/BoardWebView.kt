@@ -55,6 +55,7 @@ class WebController {
     fun addTask() = js("oboard.addTask()")
     fun tasks() = js("oboard.openTasks()")
     fun closeOverlay() = js("oboard.closeOverlay()")
+    fun closePopovers() = js("oboard.ui.closePopovers()")
     fun insets(top: Int, bottom: Int) = js("oboard.insetsChanged($top,$bottom)")
 }
 

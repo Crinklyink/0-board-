@@ -45,6 +45,12 @@ function start() {
   // Native controls sit above the WebView; keep them clear of HTML dialogs and their save buttons.
   new MutationObserver(() => post('overlay', { open: !ui.overlay.hidden }))
     .observe(ui.overlay, { attributes: true, attributeFilter: ['hidden'] });
+  // Same for small menus (More tools, colours): on the unfolded phone the native mic sits where their last items open.
+  let popoverOpen = false;
+  new MutationObserver(() => {
+    const open = !!root.querySelector('.popover');
+    if (open !== popoverOpen) post('popover', { open: (popoverOpen = open) });
+  }).observe(root, { childList: true, subtree: true });
   const input = new Input({ canvas, session, ui });
   ui.input = input;
   session.input = input;
