@@ -100,6 +100,7 @@ honest list is in [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
 | [docs/VOICE.md](docs/VOICE.md) | Speech model research, benchmarks and the choices made (incl. Qwen3-TTS) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Where the key lives, pairing, tokens, network exposure |
 | [docs/TEST-REPORT.md](docs/TEST-REPORT.md) | Acceptance tests A–I: what ran, results, what is still unverified |
+| [docs/RELEASE-0.4.1.md](docs/RELEASE-0.4.1.md) | v0.4.1 fixes: board view crash recovery, toolbar fit, task stacking, widget status |
 | [docs/RELEASE-0.4.0.md](docs/RELEASE-0.4.0.md) | What's new in v0.4, fixes and upgrade instructions |
 
 ## Development

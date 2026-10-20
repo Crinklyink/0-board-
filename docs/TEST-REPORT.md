@@ -1,6 +1,50 @@
 # Test report
 
-Version 0.4.0, 19 October 2026. A test is marked as passing only if it actually ran.
+Version 0.4.1, 20 October 2026. A test is marked as passing only if it actually ran.
+
+## v0.4.1 verification
+
+0.4.1 fixes four bugs found by reviewing 0.4.0. Each new check below was also run against the 0.4.0 code, and failed
+there for the bug it covers.
+
+- **PASSED — task stacking:** `node tools/check-productivity.mjs` now checks that a new task, and a task made from a
+  note stacked above everything else, are drawn on top in the browser and in the saved data. On 0.4.0 the new task had
+  z = 0, under the template's sections.
+- **PASSED — toolbar on touch screens:** the same check emulates a touch screen at 681, 700, 720, 768, 800, 900 and
+  1280 px. At each width it requires the toolbar to stay on screen without scrolling, Undo and Redo to stay on it, and
+  any hidden tools to be under **More**. It also checks that a 760 px mouse screen still shows the full toolbar.
+  On 0.4.0 it failed at 681 px with Undo and Redo cut off.
+- **PASSED — widget status:** the new `node tools/check-widget-ready.mjs` runs four widgets in headless Chrome against
+  a local fake API. It requires:
+  - a widget whose second, slow request depends on the first to report "Price 123.45", not its loading text;
+  - three slow requests in a row to report once, with the final text;
+  - a widget with no requests to still report as running;
+  - a failing follow-up request to report an error and never "running".
+
+  On 0.4.0 the first widget was reported running while it showed "Loading price…".
+  `node tools/check-widgets.mjs` now also fails a widget reported running while it says "Loading". All six templates
+  passed with live data; the weather widget reported its full five-day forecast.
+- **PASSED — board view crash recovery (emulator, 2184×1968):** opened a board with six live widgets on the full
+  canvas, then used the debug build's commands:
+  - `crash-canvas` crashed the board view's renderer;
+  - `kill-canvas` stopped it the way Android does when memory is low.
+
+  Both times the app process kept running (same PID) and a new renderer started. The app logged
+  `Board renderer gone (crashed=true/false); rebuilding the board view` with no fatal exception. The same board came
+  back with the weather widget running, and its More menu opened normally.
+- **PASSED — server:** 73 tests. **PASSED — browser:** all `check-productivity` checks, no uncaught JavaScript errors.
+- **PASSED — Pi distribution:** `oboard-pi-0.4.1.tar.gz` boots and passes `tools/check-package.mjs`, which now also
+  runs under Git Bash's GNU tar.
+- **PASSED — Android lint:** `lintRelease`: zero errors, 13 warnings (17 in 0.4.0). The board view now handles
+  `onRenderProcessGone`. androidx.webkit's lint rule still flags every `WebViewClient()` constructor call, including
+  Kotlin's `object : WebViewClient()`, so that one rule is suppressed on `BoardWebView`, with a comment saying why.
+- **PASSED — Android builds and APK:** debug (arm64 + x86_64) and signed, minified arm64 release. The signature
+  verifies and the signer matches v0.4.0. `zipalign -c -P 16 4` succeeds. `aapt2` confirms package `app.oboard`,
+  version 0.4.1 (5), minSdk 29, targetSdk 36 and arm64-v8a only. APK SHA-256:
+  `e791d9bf23a0bbf8680b7f88eb7cad347d083cac8be934dd68e8fc47a1d526d6`. The crash test above used the debug build; its
+  crash commands do not exist in release builds.
+- **Found, not fixed in 0.4.1:** on the unfolded canvas, the phone's floating mic button covers the bottom of the
+  web toolbar's **More** menu. HTML dialogs already hide it; the More menu does not yet.
 
 ## v0.4 verification
 

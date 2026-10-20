@@ -10,6 +10,7 @@ import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -82,7 +84,9 @@ private class WebBridge(private val ctx: Context, private val config: String, pr
  * The canvas UI is the exact same code that runs on the TV, bundled in the APK (assets/web) and served from a
  * private origin through WebViewAssetLoader. It talks to the Pi directly over HTTP/WebSocket with this phone's token.
  */
-@SuppressLint("SetJavaScriptEnabled")
+// onRenderProcessGone is implemented below. androidx.webkit's lint rule flags every `WebViewClient()` constructor
+// call, which includes the one in Kotlin's `object : WebViewClient()`, so it cannot see that.
+@SuppressLint("SetJavaScriptEnabled", "MissingOnRenderProcessGone")
 @Composable
 fun BoardWebView(
     mode: String,
@@ -101,10 +105,12 @@ fun BoardWebView(
         fileCallback = null
     }
     val currentBoard by rememberUpdatedState(boardId)
+    // Bumped when Android kills or crashes the page's renderer, to build a fresh WebView in place of the dead one.
+    var renderEpoch by remember { mutableIntStateOf(0) }
 
     // A new address (the phone moved from home Wi-Fi to Tailscale) or a new pairing rebuilds the page against it.
     // Unsent edits survive: the page keeps them in its offline outbox.
-    key(serverUrl, token) {
+    key(serverUrl, token, renderEpoch) {
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -143,6 +149,17 @@ fun BoardWebView(
                             }
                         } else null
 
+                    // The renderer died: it crashed, or Android reclaimed its memory (more likely with many widgets open).
+                    // Without this the whole app would crash. The dead view must not be used again; a new key builds
+                    // a fresh one, and edits not yet sent come back from the page's offline outbox.
+                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                        android.util.Log.w("OBoard", "Board renderer gone (crashed=${detail.didCrash()}); rebuilding the board view")
+                        if (controller.view === view) controller.view = null
+                        renderEpoch++
+                        event(WebEvent("renderer-gone", JSONObject().put("crashed", detail.didCrash())))
+                        return true
+                    }
+
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         // Never navigate the canvas away; open external links in the browser.
                         if (request.url.host == "appassets.androidplatform.net") return false
@@ -173,8 +190,9 @@ fun BoardWebView(
         },
         onRelease = { view ->
             if (controller.view === view) controller.view = null
-            view.stopLoading()
-            view.destroy()
+            // A view whose renderer is gone can throw here; it only needs to be let go.
+            runCatching { view.stopLoading() }
+            runCatching { view.destroy() }
         },
     )
     }

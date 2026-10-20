@@ -99,6 +99,9 @@ html[data-chrome="min"] .toolbar { bottom: calc(10px + var(--inset-bottom)); }
   .toolbar .wide-only { display: none; }
   .toolbar .narrow-only { display: inline-grid; }
 }
+/* Set by ui.js whenever the full toolbar would not fit (e.g. a 700 px touch screen). */
+.toolbar.tight .wide-only { display: none; }
+.toolbar.tight .narrow-only { display: inline-grid; }
 @media (max-width: 460px) {
   :root { --ctl: 40px; }
   .toolbar .not-xs { display: none; }

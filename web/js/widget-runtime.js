@@ -14,6 +14,7 @@
   let readyTimer = 0;
   let firstFetchDone = false;
   let fetchesInFlight = 0;
+  let ticksRunning = 0;
   let errorsSent = 0;
   let lastErrorAt = 0;
   let visible = true;
@@ -39,7 +40,9 @@
       const tick = async () => {
         if (!visible) return;
         loop.last = Date.now();
-        try { await fn(); } catch (e) { fail(e); }
+        ticksRunning++;
+        try { await fn(); } catch (e) { fail(e); } finally { ticksRunning--; }
+        if (!readySent && firstFetchDone) markReadySoon(200);
       };
       loop.tick = tick;
       loop.timer = setInterval(tick, ms);
@@ -206,6 +209,9 @@
     clearTimeout(readyTimer);
     readyTimer = setTimeout(() => {
       if (readySent || needsKey || document.querySelector('.ob-msg.err')) return;
+      // Still loading (e.g. a second request that depends on the first): report what it shows once it has settled,
+      // so the assistant is never told a widget "shows: Loading…".
+      if (fetchesInFlight > 0 || ticksRunning > 0) { markReadySoon(250); return; }
       readySent = true;
       send({ type: 'report', level: 'ready', text: visibleText() });
     }, ms);

@@ -9,19 +9,22 @@ import { pathToFileURL } from 'node:url';
 
 const version = JSON.parse(fs.readFileSync(new URL('../server/package.json', import.meta.url), 'utf8')).version;
 const archive = path.resolve(process.argv[2] || `dist/oboard-pi-${version}.tar.gz`);
-const entries = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8', windowsHide: true }).trim().split(/\r?\n/);
+// tar runs next to the archive and gets only its file name: GNU tar (Git Bash) reads "C:\..." as a remote host.
+const tar = (args, opts = {}) => execFileSync('tar', args, { cwd: path.dirname(archive), windowsHide: true, ...opts });
+const archiveName = path.basename(archive);
+const entries = tar(['-tzf', archiveName], { encoding: 'utf8' }).trim().split(/\r?\n/);
 for (const entry of entries) {
   assert(!entry.includes('..'), `Unsafe archive entry: ${entry}`);
   assert(!/(^|\/)(?:\.env|server-credentials\.json(?:\.tmp)?|secrets\.json|display\.token)$/.test(entry), `Private file included: ${entry}`);
   assert(!/\.(?:db(?:-wal|-shm)?|jks|keystore)$/.test(entry), `Private data included: ${entry}`);
 }
 for (const rel of ['server/src/setup.js', 'web/shared/board-templates.js', 'web/shared/project-memory.js', 'web/js/productivity.js', 'pi/install.sh']) assert(entries.includes(`oboard/${rel}`), `Missing ${rel}`);
-const detail = execFileSync('tar', ['-tvzf', archive, 'oboard/pi/install.sh'], { encoding: 'utf8', windowsHide: true });
+const detail = tar(['-tvzf', archiveName, 'oboard/pi/install.sh'], { encoding: 'utf8' });
 assert(detail.startsWith('-rwxr-xr-x'), 'Installer must be executable');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oboard-package-check-'));
 let app;
 try {
-  execFileSync('tar', ['-xzf', archive, '-C', tmp], { windowsHide: true });
+  tar(['-xzf', archiveName, '-C', tmp.replaceAll('\\', '/')]); // GNU tar also mangles backslashes; both tars take "/"
   const root = path.join(tmp, 'oboard');
   assert(!fs.readFileSync(path.join(root, 'pi/install.sh'), 'utf8').includes('\r'), 'Installer has Windows line endings');
   const { createServer } = await import(pathToFileURL(path.join(root, 'server/src/index.js')).href);

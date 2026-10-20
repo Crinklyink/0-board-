@@ -82,6 +82,10 @@ try {
     form.querySelector('input[type=date]').value = '2026-12-01'; form.requestSubmit();`);
   await until('oboard.model.list().some(o => o.text === "Verify v0.4 on the Fold") && oboard.net.pending.size === 0', 'task saved');
   const taskId = await evaluate('oboard.model.list().find(o => o.text === "Verify v0.4 on the Fold").id');
+  // Regression: new tasks used to keep z = 0 and land underneath the template's sections and notes.
+  const topOf = (id) => evaluate(`{ const all = oboard.model.list(); const t = oboard.model.get(${JSON.stringify(id)}); ({ z: t.z, below: Math.max(...all.filter(o => o.id !== t.id).map(o => o.z ?? 0)) }); }`);
+  const added = await topOf(taskId);
+  assert(added.z > added.below, `A new task must be drawn above existing objects (task z ${added.z}, highest other z ${added.below})`);
   await evaluate(`{ const o = oboard.model.get(${JSON.stringify(taskId)}); oboard.camera.set(o.x + 150, o.y + 74, 1); }`);
   await sleep(150);
   const p = await evaluate(`{ const o = oboard.model.get(${JSON.stringify(taskId)}); const p = oboard.camera.toScreen(o.x + 25, o.y + 27); const r = document.querySelector('canvas').getBoundingClientRect(); ({ x: p.x + r.left, y: p.y + r.top }); }`);
@@ -103,6 +107,20 @@ try {
   await shot('task-card.png');
   await evaluate('oboard.fit()'); await sleep(400); await shot('project-board.png');
   console.log('PASSED: task form, actual checkbox click, persistence, undo and redo');
+
+  // Converting a note: the task must also go on top, above a note stacked higher than everything else.
+  server.app.store.applyBatch(boardId, [{ op: 'put', obj: { id: 'nt_stacked', type: 'note', x: 2400, y: 2400, w: 240, h: 160, z: 900, text: 'Order new gripper pads', color: 'yellow' } }]);
+  await until(`!!oboard.model.get('nt_stacked')`, 'stacked note arrives');
+  await evaluate(`import(new URL('js/productivity.js', location.href).href).then(({ openTask }) => { openTask(oboard.ui, null, 'nt_stacked'); document.querySelector('.productivity form').requestSubmit(); })`);
+  await until(`oboard.model.list().some(o => o.type === 'task' && o.text === 'Order new gripper pads') && oboard.net.pending.size === 0`, 'task from note saved');
+  const fromNoteId = await evaluate(`oboard.model.list().find(o => o.type === 'task' && o.text === 'Order new gripper pads').id`);
+  const fromNote = await topOf(fromNoteId);
+  assert(fromNote.z > 900, `A task made from a note must be drawn above it (task z ${fromNote.z})`);
+  assert.equal(server.app.store.getObject(boardId, fromNoteId).z, fromNote.z, 'The saved task keeps the same stacking order');
+  // Remove both again so the task-list counts below stay as they were.
+  server.app.store.applyBatch(boardId, [{ op: 'del', id: fromNoteId }, { op: 'del', id: 'nt_stacked' }]);
+  await until(`!oboard.model.get(${JSON.stringify(fromNoteId)}) && !oboard.model.get('nt_stacked')`, 'test note and task removed');
+  console.log('PASSED: new tasks and tasks made from notes are drawn above existing objects');
 
   await evaluate('oboard.openTasks()');
   assert.equal(await evaluate('document.querySelectorAll(".task-row").length'), 3);
@@ -165,6 +183,35 @@ try {
   await until('document.querySelector(".diagnostic-list").textContent.includes("Google accepted the key")', 'Gemini test');
   await shot('setup-diagnostics.png');
   console.log('PASSED: diagnostics UI, key save and Gemini access check against a local stand-in');
+
+  // Regression: on touch screens (larger buttons) between 681 and ~800 px wide, Undo/Redo ran off the toolbar.
+  await evaluate('oboard.ui.closeOverlay()');
+  await call('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  const toolbarAt = async (width) => {
+    await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: true });
+    await sleep(200);
+    return evaluate(`{ const tb = document.querySelector('.toolbar'); const r = tb.getBoundingClientRect();
+      const shown = [...tb.querySelectorAll('button')].filter(b => b.offsetParent);
+      const label = (b) => b.getAttribute('aria-label');
+      ({ coarse: matchMedia('(pointer: coarse)').matches, scrolls: tb.scrollWidth > tb.clientWidth + 1, onScreen: r.left >= 0 && r.right <= innerWidth,
+         clipped: shown.filter(b => { const q = b.getBoundingClientRect(); return q.left < r.left - 0.5 || q.right > r.right + 0.5; }).map(label),
+         shown: shown.map(label) }); }`);
+  };
+  for (const width of [681, 700, 720, 768, 800, 900, 1280]) {
+    const t = await toolbarAt(width);
+    assert(t.coarse, 'Touch emulation must make the page use touch-sized buttons');
+    assert(!t.scrolls && t.onScreen && !t.clipped.length, `Toolbar must fit at ${width} px on touch (clipped: ${t.clipped.join(', ') || 'none'})`);
+    for (const need of ['Undo', 'Redo']) assert(t.shown.includes(need), `${need} must stay on the toolbar at ${width} px`);
+    // Anything moved off the toolbar has to be reachable through "More".
+    if (!t.shown.includes('Add task')) assert(t.shown.includes('More tools'), `More tools must appear when tools are hidden at ${width} px`);
+    if (width === 700) await shot('toolbar-touch-700.png');
+  }
+  assert((await toolbarAt(1280)).shown.includes('Add task'), 'A wide touch screen shows the full toolbar');
+  await call('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await call('Emulation.setDeviceMetricsOverride', { width: 760, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(200);
+  assert(await evaluate(`!!document.querySelector('.toolbar [aria-label="Add task"]').offsetParent`), 'A 760 px mouse screen still fits the full toolbar');
+  console.log('PASSED: toolbar fits from 681 to 1280 px on touch screens, with hidden tools under More');
 
   await call('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
   await evaluate('oboard.ui.closeOverlay(); oboard.ui.moreTools()');

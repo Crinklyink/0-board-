@@ -49,7 +49,7 @@ node scripts/package.mjs
 ```
 
 ```bash
-scp dist/oboard-pi-0.4.0.tar.gz <you>@oboard.local:
+scp dist/oboard-pi-0.4.1.tar.gz <you>@oboard.local:
 ```
 
 Or copy the whole project folder (the `server`, `web` and `pi` folders are what matter).
@@ -61,7 +61,7 @@ ssh <you>@oboard.local
 ```
 
 ```bash
-tar -xzf oboard-pi-0.4.0.tar.gz && cd oboard
+tar -xzf oboard-pi-0.4.1.tar.gz && cd oboard
 ```
 
 ## 3. Install

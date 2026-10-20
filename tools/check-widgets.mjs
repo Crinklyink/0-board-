@@ -70,9 +70,11 @@ try {
 let failed = 0;
 for (const op of ops) {
   const s = (await api('GET', `/api/widgets/${op.obj.id}/logs`)).status;
-  const ok = s?.level === 'ready';
+  // "Running" while it still says "Loading…" means the runtime reported too early (it once did for weather).
+  const early = s?.level === 'ready' && /loading/i.test(s.text || '');
+  const ok = s?.level === 'ready' && !early;
   if (!ok) failed++;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${op.obj.template.padEnd(10)} ${ok ? s.text : s ? `${s.level}: ${s.message}` : 'no report'}`);
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${op.obj.template.padEnd(10)} ${ok ? s.text : early ? `reported running while showing: ${s.text}` : s ? `${s.level}: ${s.message}` : 'no report'}`);
 }
 console.log(`screenshot: ${out}`);
 process.exit(failed ? 1 : 0);

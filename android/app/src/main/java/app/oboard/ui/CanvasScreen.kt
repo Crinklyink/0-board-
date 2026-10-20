@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.oboard.BuildConfig
 
 /** Full-screen canvas for one board. On the unfolded Fold the conversation docks beside it. */
 @Composable
@@ -74,6 +76,15 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
         vm.pinnedAiBoard.value = currentBoard
         onDispose { vm.pinnedAiBoard.value = before }
     }
+    // Debug builds: crash or kill the canvas renderer on command, to test that the app survives and rebuilds it.
+    if (BuildConfig.DEBUG) LaunchedEffect(Unit) {
+        vm.c.debugCommands.collect { cmd ->
+            when (cmd) {
+                "crash-canvas" -> controller.view?.loadUrl("chrome://crash")
+                "kill-canvas" -> controller.view?.loadUrl("chrome://kill")
+            }
+        }
+    }
 
     Row(Modifier.fillMaxSize().background(O.Bg)) {
         Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -85,6 +96,8 @@ fun CanvasScreen(vm: AppViewModel, boardId: String, onClose: () -> Unit) {
                     "overlay" -> canvasOverlay = e.data.optBoolean("open")
                     "ready" -> controller.insets(topInset + 56, bottomInset)
                     "board" -> e.data.optString("id").takeIf { it.isNotBlank() }?.let { currentBoard = it }
+                    // The view is being rebuilt; any panel that was open in the old page is gone with it.
+                    "renderer-gone" -> { canvasOverlay = false; vm.notice("The board view stopped and was reloaded") }
                 }
             }
             // top bar

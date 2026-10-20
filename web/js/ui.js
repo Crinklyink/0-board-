@@ -122,6 +122,17 @@ export class UI {
       this.fileInput.value = '';
     });
     this.root.append(this.toolbar, this.fileInput);
+    // However many buttons there are, the toolbar never runs off the screen: when the full set does not fit, the
+    // less-used tools move into "More", exactly as on a narrow phone. Measured, so new buttons need no CSS changes.
+    const fit = () => {
+      const tb = this.toolbar;
+      tb.classList.remove('tight');
+      tb.classList.toggle('tight', tb.scrollWidth > tb.clientWidth + 1);
+    };
+    new ResizeObserver(fit).observe(this.root);
+    // Touch screens use larger buttons (app.css), so switching input mode can change the fit without a resize.
+    matchMedia('(pointer: coarse)').addEventListener('change', fit);
+    fit();
   }
 
   bind() {

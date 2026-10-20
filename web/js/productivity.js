@@ -61,7 +61,9 @@ export function openTask(ui, id = null, noteId = null) {
       const obj = normalizeObject({ id: task?.id || newId('tk'), type: 'task', x: spot.x, y: spot.y, w: 300, h: 148, ...values });
       if (task) ui.s.commit([{ op: 'patch', id: task.id, set: values }], { label: 'Edit task' });
       else {
-        ui.s.create({ ...obj, color: note?.color || 'default' }, noteId ? 'Create task from note' : 'Add task');
+        // normalizeObject fills in z: 0; drop it so create() puts the new task on top like every other new object.
+        const { z: _bottom, ...fresh } = obj;
+        ui.s.create({ ...fresh, color: note?.color || 'default' }, noteId ? 'Create task from note' : 'Add task');
         ui.s.setSelection([obj.id]);
       }
       ui.closeOverlay();
